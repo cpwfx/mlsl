@@ -11,21 +11,19 @@ let parse fname =
 		Some (MlslParser.main MlslLexer.token lexbuf)
 	with
 	| Parsing.Parse_error ->
-		let pos = lexbuf.Lexing.lex_start_p in
-		Printf.printf "%s:\nSyntax error (Unexpected token \"%s\")\n"
-			(ParserMisc.string_of_pos pos)
-			(Lexing.lexeme lexbuf);
+		Errors.fatal_error_p (lexbuf.Lexing.lex_start_p)
+			(Printf.sprintf "Syntax error (Unexpected token \"%s\")." 
+				(Lexing.lexeme lexbuf)
+			);
 		None
 	| ParserMisc.Invalid_character c ->
-		let pos = lexbuf.Lexing.lex_start_p in
-		Printf.printf "%s:\nInvalid character '%s' (0x%X).\n"
-			(ParserMisc.string_of_pos pos)
-			(Char.escaped c)
-			(Char.code c);
+		Errors.fatal_error_p (lexbuf.Lexing.lex_start_p)
+			(Printf.sprintf "Invalid character '%s' (0x%X)."
+				(Char.escaped c)
+				(Char.code c)
+			);
 		None
 	| ParserMisc.Unknown_operator op ->
-		let pos = lexbuf.Lexing.lex_start_p in
-		Printf.printf "%s:\nUnrecognized operator \"%s\".\n"
-			(ParserMisc.string_of_pos pos)
-			op;
+		Errors.fatal_error_p (lexbuf.Lexing.lex_start_p)
+			(Printf.sprintf "Unrecognized operator \"%s\"." op);
 		None

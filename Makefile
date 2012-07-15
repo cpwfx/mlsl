@@ -1,7 +1,7 @@
 SRCDIR=src
 OBJDIR=obj
 BINDIR=bin
-OCAMLFILES=mlslAst parserMisc mlslParser mlslLexer parser
+OCAMLFILES=errors mlslAst parserMisc mlslParser mlslLexer parser typeCheck
 .PHONY: all mlslYacc clean
 
 all: $(OBJDIR) $(BINDIR) \
