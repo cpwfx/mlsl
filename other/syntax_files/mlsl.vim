@@ -7,7 +7,7 @@ endif
 
 syn keyword mlslTodo contained TODO FIXME XXX NOTE
 syn match   mlslComment "//.*$" contains=skimlTodo
-syn region  mlslComment start="(\*" end="\*)" contains=skimlTodo
+syn region  mlslComment start="(\*" end="\*)" contains=mlslComment,mlslTodo
 syn keyword mlslKeyword contained attr const fragment let vertex shader
 syn keyword mlslPrimType contained bool float int mat44 unit vec2 vec3 vec4
 syn keyword mlslSemantics contained POSITION
