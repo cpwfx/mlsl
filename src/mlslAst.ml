@@ -1,8 +1,11 @@
 (* File: mlslAst.ml *)
 
 type typ =
+| TBool
 | TFloat
 | TInt
+| TMat44
+| TUnit
 | TVec2
 | TVec3
 | TVec4
@@ -13,12 +16,52 @@ type typ_term =
 	; tt_typ : typ
 	}
 
-type topdecl_type =
-| TDConstDecl 
-	of string   (* name *)
-	*  typ_term (* type *)
+type expr =
+	{ e_pos  : Lexing.position
+	; e_kind : expr_kind
+	}
+and expr_kind =
+| EVar     of string
+| EVarying of string
+| EInt     of int
+| ERecord  of record_field_value list
+| EPair    of expr * expr
+| EMul     of expr * expr
+and record_field_value =
+	{ rfv_pos   : Lexing.position
+	; rfv_name  : string
+	; rfv_value : expr
+	}
 
-type topdecl =
+type attr_semantics =
+	{ asem_name : string
+	; asem_pos  : Lexing.position
+	}
+
+type topdef_kind =
+| TDAttrDecl
+	of string         (* name      *)
+	*  attr_semantics (* semantics *)
+	*  typ_term       (* type      *)
+| TDConstDecl 
+	of string         (* name *)
+	*  typ_term       (* type *)
+| TDFragmentShader
+	of string         (* name *)
+	*  expr           (* body *)
+| TDVertexShader
+	of string         (* name *)
+	*  expr           (* body *)
+| TDShader
+	of string         (* name *)
+	*  expr           (* definition *)
+
+type topdef =
 	{ td_pos  : Lexing.position
-	; td_type : topdecl_type
+	; td_kind : topdef_kind
+	}
+
+let make_expr pos kind =
+	{ e_pos  = pos
+	; e_kind = kind
 	}

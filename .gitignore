@@ -1,3 +1,6 @@
 bin/*
 obj/*
 *.swp
+src/mlslLexer.ml
+src/mlslParser.mli
+src/mlslParser.ml
