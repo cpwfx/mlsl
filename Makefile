@@ -1,8 +1,8 @@
 SRCDIR=src
 OBJDIR=obj
 BINDIR=bin
-OCAMLFILES=errors mlslAst parserMisc mlslParser mlslLexer parser topDef \
-	typeCheck
+OCAMLFILES=misc listExt errors mlslAst parserMisc mlslParser mlslLexer parser \
+	typeWorlds topDef typeCheck
 .PHONY: all mlslYacc clean
 
 all: $(OBJDIR) $(BINDIR) \

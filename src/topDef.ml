@@ -13,3 +13,6 @@ let add name types def =
 			);
 	else
 		topdef_map := StrMap.add name (types, def) !topdef_map
+
+let worlds0 () =
+	TypeWorlds.create (StrMap.map fst !topdef_map)

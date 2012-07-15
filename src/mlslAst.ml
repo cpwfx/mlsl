@@ -9,7 +9,9 @@ type typ =
 | TVec2
 | TVec3
 | TVec4
-| TArrow of typ * typ
+| TArrow  of typ * typ
+| TRecord of (string * typ) list
+| TVertex of (string * typ) list
 
 type typ_term =
 	{ tt_pos : Lexing.position
@@ -69,9 +71,36 @@ let make_expr pos kind =
 let is_reg_type tp =
 	match tp with
 	| TBool | TFloat | TInt | TUnit | TVec2 | TVec3 | TVec4 -> true
-	| TMat44 | TArrow _ -> false
+	| TMat44 | TArrow _ | TRecord _ | TVertex _ -> false
 
 let rec is_data_type tp =
 	match tp with
 	| TBool | TFloat | TInt | TMat44 | TUnit | TVec2 | TVec3 | TVec4 -> true
-	| TArrow _ -> false
+	| TArrow _ | TVertex _ -> false
+	| TRecord r -> List.for_all (fun (_, t) -> is_data_type t) r
+
+let rec string_of_typ p tp =
+	match tp with
+	| TBool          -> "bool"
+	| TFloat         -> "float"
+	| TInt           -> "int"
+	| TMat44         -> "mat44"
+	| TUnit          -> "unit"
+	| TVec2          -> "vec2"
+	| TVec3          -> "vec3"
+	| TVec4          -> "vec4"
+	| TArrow(t1, t2) ->
+		let r = string_of_typ 1 t1 ^ " -> " ^ string_of_typ 0 t2 in
+		if p > 0 then "(" ^ r ^ ")" else r
+	| TRecord []     -> "{}"
+	| TRecord((n, t) :: r) ->
+		Printf.sprintf "{ %s : %s%s }"
+			n
+			(string_of_typ 0 t)
+			(List.fold_left (fun s (n, t) -> s ^ "; " ^ n ^ " : " ^ string_of_typ 0 t) "" r)
+	| TVertex [] -> "vertex{}"
+	| TVertex((n, t) :: r) ->
+		Printf.sprintf "vertex{ %s : %s%s }"
+			n
+			(string_of_typ 0 t)
+			(List.fold_left (fun s (n, t) -> s ^ "; " ^ n ^ " : " ^ string_of_typ 0 t) "" r)

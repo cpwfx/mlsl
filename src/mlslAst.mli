@@ -9,7 +9,9 @@ type typ =
 | TVec2
 | TVec3
 | TVec4
-| TArrow of typ * typ
+| TArrow  of typ * typ
+| TRecord of (string * typ) list
+| TVertex of (string * typ) list
 
 type typ_term =
 	{ tt_pos : Lexing.position
@@ -65,3 +67,5 @@ val make_expr : Lexing.position -> expr_kind -> expr
 
 val is_reg_type  : typ -> bool
 val is_data_type : typ -> bool
+
+val string_of_typ : int -> typ -> string
