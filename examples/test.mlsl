@@ -1,0 +1,24 @@
+(* Examle *)
+(* Block comment (* can be nested *) *)
+// Line comment
+
+// Const declarations
+const c1          : float
+const col         : vec4
+const projMatrix  : mat44
+
+// Attr declarations
+attr POSITION pos : vec4
+
+// vertex shader
+let vertex vs =
+	{ position = projMatrix * pos
+	; c1       = c1
+	; col      = col
+	}
+
+// fragment shader
+let fragment fs =
+	$col * $c1
+
+let shader my_shader = (vs, fs)
