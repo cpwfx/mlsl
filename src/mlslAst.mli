@@ -62,3 +62,6 @@ type topdef =
 	}
 
 val make_expr : Lexing.position -> expr_kind -> expr
+
+val is_reg_type  : typ -> bool
+val is_data_type : typ -> bool

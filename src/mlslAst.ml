@@ -65,3 +65,13 @@ let make_expr pos kind =
 	{ e_pos  = pos
 	; e_kind = kind
 	}
+
+let is_reg_type tp =
+	match tp with
+	| TBool | TFloat | TInt | TUnit | TVec2 | TVec3 | TVec4 -> true
+	| TMat44 | TArrow _ -> false
+
+let rec is_data_type tp =
+	match tp with
+	| TBool | TFloat | TInt | TMat44 | TUnit | TVec2 | TVec3 | TVec4 -> true
+	| TArrow _ -> false
