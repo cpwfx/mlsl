@@ -11,9 +11,12 @@ type typ =
 | TVec2
 | TVec3
 | TVec4
-| TArrow  of typ * typ
-| TRecord of (string * typ) list
-| TVertex of (string * typ) list
+| TArrow    of typ * typ
+| TPair     of typ * typ
+| TRecord   of (string * typ) list
+| TVertex   of (string * typ) list
+| TFragment of (string * typ) list
+| TVertexTop
 
 type t
 

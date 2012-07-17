@@ -17,9 +17,12 @@ type typ =
 | TVec2
 | TVec3
 | TVec4
-| TArrow  of typ * typ
-| TRecord of (string * typ) list
-| TVertex of (string * typ) list
+| TArrow    of typ * typ
+| TPair     of typ * typ
+| TRecord   of (string * typ) list
+| TVertex   of (string * typ) list
+| TFragment of (string * typ) list
+| TVertexTop
 
 type t = typ list StrMap.t
 
@@ -48,8 +51,11 @@ let rec to_ast world tp =
 	| TVec3  -> MlslAst.TVec3
 	| TVec4  -> MlslAst.TVec4
 	| TArrow(t1, t2) -> MlslAst.TArrow(to_ast world t1, to_ast world t2)
+	| TPair(t1, t2) -> MlslAst.TPair(to_ast world t1, to_ast world t2)
 	| TRecord rd -> MlslAst.TRecord(List.map (fun (n, t) -> (n, to_ast world t)) rd)
 	| TVertex vd -> MlslAst.TVertex(List.map (fun (n, t) -> (n, to_ast world t)) vd)
+	| TFragment vd -> MlslAst.TFragment(List.map (fun (n, t) -> (n, to_ast world t)) vd)
+	| TVertexTop -> MlslAst.TVertexTop
 
 let rec of_ast tp =
 	match tp with
@@ -62,7 +68,10 @@ let rec of_ast tp =
 	| MlslAst.TVec3  -> TVec3
 	| MlslAst.TVec4  -> TVec4
 	| MlslAst.TArrow(t1, t2) -> TArrow(of_ast t1, of_ast t2)
+	| MlslAst.TPair(t1, t2) -> TPair(of_ast t1, of_ast t2)
 	| MlslAst.TRecord rd -> TRecord(List.map (fun (n, t) -> (n, of_ast t)) rd)
 	| MlslAst.TVertex vd -> TVertex(List.map (fun (n, t) -> (n, of_ast t)) vd)
+	| MlslAst.TFragment vd -> TFragment(List.map (fun (n, t) -> (n, of_ast t)) vd)
+	| MlslAst.TVertexTop -> TVertexTop
 
 let create vmap = StrMap.map (List.map of_ast) vmap

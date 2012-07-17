@@ -2,6 +2,26 @@
 
 module IntSet = Set.Make(Misc.Int)
 module StrMap = Map.Make(String)
+module StrSet = Map.Make(String)
+
+let mul_types =
+	(*      op1        *       op2        =       value     *)
+	[ TypeWorlds.TFloat, TypeWorlds.TFloat, TypeWorlds.TFloat
+	; TypeWorlds.TFloat, TypeWorlds.TMat44, TypeWorlds.TMat44
+	; TypeWorlds.TFloat, TypeWorlds.TVec2,  TypeWorlds.TVec2
+	; TypeWorlds.TFloat, TypeWorlds.TVec3,  TypeWorlds.TVec3
+	; TypeWorlds.TFloat, TypeWorlds.TVec4,  TypeWorlds.TVec4
+	; TypeWorlds.TInt,   TypeWorlds.TInt,   TypeWorlds.TInt
+	; TypeWorlds.TMat44, TypeWorlds.TFloat, TypeWorlds.TMat44
+	; TypeWorlds.TMat44, TypeWorlds.TMat44, TypeWorlds.TMat44
+	; TypeWorlds.TMat44, TypeWorlds.TVec4,  TypeWorlds.TVec4
+	; TypeWorlds.TVec2,  TypeWorlds.TFloat, TypeWorlds.TVec2
+	; TypeWorlds.TVec2,  TypeWorlds.TVec2,  TypeWorlds.TVec2
+	; TypeWorlds.TVec3,  TypeWorlds.TFloat, TypeWorlds.TVec3
+	; TypeWorlds.TVec3,  TypeWorlds.TVec3,  TypeWorlds.TVec3
+	; TypeWorlds.TVec4,  TypeWorlds.TFloat, TypeWorlds.TVec4
+	; TypeWorlds.TVec4,  TypeWorlds.TVec4,  TypeWorlds.TVec4
+	]
 
 let check_field_uniqueness rd =
 	let rec check_uniqueness field_map rd =
@@ -55,6 +75,32 @@ let rec infer_type gamma worlds expr =
 
 (* ========================================================================= *)
 
+let rec fast_check_code gamma expr =
+	match expr.MlslAst.e_kind with
+	| MlslAst.EVar x ->
+		begin match TopDef.check_name x with
+		| None ->
+			if StrSet.mem x gamma then ()
+			else 
+				Errors.error_p expr.MlslAst.e_pos 
+					(Printf.sprintf "Undefined variable %s." x)
+		| Some _ -> ()
+		end
+	| MlslAst.EVarying x -> ()
+	| MlslAst.EInt n ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: fast_check_code EInt."
+	| MlslAst.ERecord rd ->
+		check_field_uniqueness rd;
+		List.iter (fun field -> fast_check_code gamma field.MlslAst.rfv_value) rd
+	| MlslAst.EPair(v1, v2) ->
+		fast_check_code gamma v1;
+		fast_check_code gamma v2
+	| MlslAst.EMul(v1, v2) ->
+		fast_check_code gamma v1;
+		fast_check_code gamma v2
+
+(* ========================================================================= *)
+
 let check_semantics semantics =
 	match semantics.MlslAst.asem_name with
 	| "POSITION" -> ()
@@ -83,38 +129,85 @@ let print_type_list l =
 			s ^ "\n" ^ MlslAst.string_of_typ 0 (TypeWorlds.to_ast w t)
 		) "" l
 
+(* ========================================================================= *)
+
+let check_attr_decl td name semantics typ =
+	begin if not (MlslAst.is_reg_type typ.MlslAst.tt_typ) then
+		Errors.error_p typ.MlslAst.tt_pos
+			"Attributes with not register type forbidden."
+	end;
+	check_semantics semantics;
+	TopDef.add name [typ.MlslAst.tt_typ] td
+
+let check_const_decl td name typ =
+	begin if not (MlslAst.is_data_type typ.MlslAst.tt_typ) then
+		Errors.error_p typ.MlslAst.tt_pos 
+			"Constants with not data type are forbidden."
+	end;
+	TopDef.add name [typ.MlslAst.tt_typ] td
+
+let check_fragment_shader td name body =
+	Errors.error_p td.MlslAst.td_pos "Unimplemented: check_topdef TDFragmentShader."
+
+let fast_check_fragment_shader td name body =
+	fast_check_code StrSet.empty body;
+	TopDef.add name [MlslAst.TFragment []] td
+
+let check_vertex_shader td name body =
+	begin match infer_type (TopDef.worlds0 ()) [TypeWorlds.main_world] body with
+	| [] -> ()
+	| sol_raw ->
+		let sol     = List.filter is_vertex_type sol_raw in
+		if ListExt.is_empty sol then
+			Errors.error_p td.MlslAst.td_pos
+				("Vertex shader should have a type { position : vec4 ; ... }, " ^
+				"but types of this shader are:" ^ print_type_list sol_raw)
+		else
+			let types = List.map make_vertex_shader_type sol in
+			TopDef.add name types td
+	end
+
+let fast_check_vertex_shader td name body =
+	fast_check_code StrSet.empty body;
+	TopDef.add name [MlslAst.TVertexTop] td
+
+let check_shader td name definition =
+	Errors.error_p td.MlslAst.td_pos "Unimplemented: check_topdef TDShader."
+
+let fast_check_shader td name definition =
+	fast_check_code StrSet.empty definition;
+	TopDef.add name [MlslAst.TPair(MlslAst.TVertexTop, MlslAst.TFragment [])] td
+
+(* ========================================================================= *)
+
 let check_topdef td =
 	match td.MlslAst.td_kind with
 	| MlslAst.TDAttrDecl(name, semantics, typ) ->
-		begin if not (MlslAst.is_reg_type typ.MlslAst.tt_typ) then
-			Errors.error_p typ.MlslAst.tt_pos
-				"Attributes with not register type forbidden."
-		end;
-		check_semantics semantics;
-		TopDef.add name [typ.MlslAst.tt_typ] td
+		check_attr_decl td name semantics typ
 	| MlslAst.TDConstDecl(name, typ) ->
-		begin if not (MlslAst.is_data_type typ.MlslAst.tt_typ) then
-			Errors.error_p typ.MlslAst.tt_pos 
-				"Constants with not data type are forbidden."
-		end;
-		TopDef.add name [typ.MlslAst.tt_typ] td
+		check_const_decl td name typ
 	| MlslAst.TDFragmentShader(name, body) ->
-		Errors.error_p td.MlslAst.td_pos "Unimplemented: check_topdef TDFragmentShader."
+		check_fragment_shader td name body
 	| MlslAst.TDVertexShader(name, body) ->
-		begin match infer_type (TopDef.worlds0 ()) [TypeWorlds.main_world] body with
-		| [] -> ()
-		| sol_raw ->
-			let sol     = List.filter is_vertex_type sol_raw in
-			if ListExt.is_empty sol then
-				Errors.error_p td.MlslAst.td_pos
-					("Vertex shader should have a type { position : vec4 ; ... }, " ^
-					"but types of this shader are:" ^ print_type_list sol_raw)
-			else
-				let types = List.map make_vertex_shader_type sol in
-				TopDef.add name types td
-		end
+		check_vertex_shader td name body
 	| MlslAst.TDShader(name, definition) ->
-		Errors.error_p td.MlslAst.td_pos "Unimplemented: check_topdef TDShader."
+		check_shader td name definition
+
+let fast_check_topdef td =
+	match td.MlslAst.td_kind with
+	| MlslAst.TDAttrDecl(name, semantics, typ) ->
+		check_attr_decl td name semantics typ
+	| MlslAst.TDConstDecl(name, typ) ->
+		check_const_decl td name typ
+	| MlslAst.TDFragmentShader(name, body) ->
+		fast_check_fragment_shader td name body
+	| MlslAst.TDVertexShader(name, body) ->
+		fast_check_vertex_shader td name body
+	| MlslAst.TDShader(name, definition) ->
+		fast_check_shader td name definition
 
 let check topdef_list =
 	List.iter check_topdef topdef_list
+
+let fast_check topdef_list =
+	List.iter fast_check_topdef topdef_list

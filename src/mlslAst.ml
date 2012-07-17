@@ -9,9 +9,12 @@ type typ =
 | TVec2
 | TVec3
 | TVec4
-| TArrow  of typ * typ
-| TRecord of (string * typ) list
-| TVertex of (string * typ) list
+| TArrow    of typ * typ
+| TPair     of typ * typ
+| TRecord   of (string * typ) list
+| TVertex   of (string * typ) list
+| TFragment of (string * typ) list
+| TVertexTop
 
 type typ_term =
 	{ tt_pos : Lexing.position
@@ -71,13 +74,15 @@ let make_expr pos kind =
 let is_reg_type tp =
 	match tp with
 	| TBool | TFloat | TInt | TUnit | TVec2 | TVec3 | TVec4 -> true
-	| TMat44 | TArrow _ | TRecord _ | TVertex _ -> false
+	| TMat44 | TArrow _ | TPair _ | TRecord _ | TVertex _ | TFragment _ 
+	| TVertexTop -> false
 
 let rec is_data_type tp =
 	match tp with
 	| TBool | TFloat | TInt | TMat44 | TUnit | TVec2 | TVec3 | TVec4 -> true
-	| TArrow _ | TVertex _ -> false
+	| TArrow _ | TVertex _ | TFragment _ | TVertexTop -> false
 	| TRecord r -> List.for_all (fun (_, t) -> is_data_type t) r
+	| TPair(t1, t2) -> is_data_type t1 && is_data_type t2
 
 let rec string_of_typ p tp =
 	match tp with
@@ -92,6 +97,9 @@ let rec string_of_typ p tp =
 	| TArrow(t1, t2) ->
 		let r = string_of_typ 1 t1 ^ " -> " ^ string_of_typ 0 t2 in
 		if p > 0 then "(" ^ r ^ ")" else r
+	| TPair(t1, t2) ->
+		let r = string_of_typ 1 t1 ^ " * " ^ string_of_typ 2 t2 in
+		if p > 1 then "(" ^ r ^ ")" else r
 	| TRecord []     -> "{}"
 	| TRecord((n, t) :: r) ->
 		Printf.sprintf "{ %s : %s%s }"
@@ -104,3 +112,10 @@ let rec string_of_typ p tp =
 			n
 			(string_of_typ 0 t)
 			(List.fold_left (fun s (n, t) -> s ^ "; " ^ n ^ " : " ^ string_of_typ 0 t) "" r)
+	| TFragment [] -> "fragment{}"
+	| TFragment((n, t) :: r) ->
+		Printf.sprintf "fragment{ %s : %s%s }"
+			n
+			(string_of_typ 0 t)
+			(List.fold_left (fun s (n, t) -> s ^ "; " ^ n ^ " : " ^ string_of_typ 0 t) "" r)
+	| TVertexTop -> "vertex_top"

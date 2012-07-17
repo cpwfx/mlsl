@@ -4,6 +4,12 @@ module StrMap = Map.Make(String)
 
 let topdef_map = ref StrMap.empty
 
+let check_name name =
+	try
+		Some (StrMap.find name !topdef_map)
+	with
+	| Not_found -> None
+
 let add name types def =
 	if StrMap.mem name !topdef_map then
 		let (_, prev) = StrMap.find name !topdef_map in
