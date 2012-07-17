@@ -119,3 +119,10 @@ let rec string_of_typ p tp =
 			(string_of_typ 0 t)
 			(List.fold_left (fun s (n, t) -> s ^ "; " ^ n ^ " : " ^ string_of_typ 0 t) "" r)
 	| TVertexTop -> "vertex_top"
+
+let foreachShader td_list f =
+	List.iter (fun td ->
+			match td.td_kind with
+			| TDShader(name, definition) -> f td name definition
+			| _ -> ()
+		) td_list

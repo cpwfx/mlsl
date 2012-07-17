@@ -21,6 +21,10 @@ let warning_p pos msg =
 	warning_counter := !warning_counter + 1;
 	Printf.printf "%s:\nWarning: %s\n\n" (string_of_pos pos) msg
 
+let error msg =
+	error_counter := !error_counter + 1;
+	Printf.printf "Error: %s\n\n" msg
+
 let ok () = !error_counter = 0
 let print_status () =
 	Printf.printf "%s! %d errors, %d warnings.\n"

@@ -72,3 +72,5 @@ val is_reg_type  : typ -> bool
 val is_data_type : typ -> bool
 
 val string_of_typ : int -> typ -> string
+
+val foreachShader : topdef list -> (topdef -> string -> expr -> unit) -> unit
