@@ -1,8 +1,36 @@
 (* File: misc.ml *)
 
+exception InternalError
+
 module Int = struct
 	type t = int
 	let compare (x : t) (y : t) = compare x y
+end
+
+module ImpList = struct
+	type 'a t = ('a list) ref
+	let add l x = l := x :: !l
+	let create () = ref []
+	let to_list l = List.rev !l
+end
+
+module ListExt = struct
+	type 'a t = 'a list
+	let rec map_filter f l =
+		match l with
+		| [] -> []
+		| x::xs ->
+			match f x with
+			| None -> map_filter f xs
+			| Some y -> y :: map_filter f xs
+	let rec opt_fold_left f s l =
+		match l with
+		| [] -> s
+		| x::xs ->
+			begin match s with
+			| None -> None
+			| Some sv -> opt_fold_left f (f x sv) xs
+			end
 end
 
 module Opt = struct
@@ -15,4 +43,8 @@ module Opt = struct
 		match a with
 		| None -> ()
 		| Some av -> f av
+	let map_f a f =
+		match a with
+		| None -> None
+		| Some av -> Some (f av)
 end

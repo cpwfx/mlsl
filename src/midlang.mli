@@ -2,6 +2,7 @@
 
 type typ =
 | TFloat
+| TInt
 | TMat44
 | TVec2
 | TVec3
@@ -27,7 +28,10 @@ type param =
 	}
 
 type instr =
-| IMov of variable * variable
+| IMov   of variable * variable
+| IMulFF of variable * variable * variable
+| IMulMV44 of variable * variable * variable
+| IRet     of variable
 
 type shader =
 	{ sh_name     : string
@@ -42,3 +46,5 @@ type shader =
 val unfold_shader : string -> MlslAst.expr -> shader option
 
 val optimize : shader -> shader
+
+val string_of_typ : typ -> string

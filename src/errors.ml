@@ -21,6 +21,10 @@ let warning_p pos msg =
 	warning_counter := !warning_counter + 1;
 	Printf.printf "%s:\nWarning: %s\n\n" (string_of_pos pos) msg
 
+let fatal_error msg =
+	error_counter := !error_counter + 1;
+	Printf.printf "Fatal error: %s\n\n" msg
+
 let error msg =
 	error_counter := !error_counter + 1;
 	Printf.printf "Error: %s\n\n" msg
