@@ -13,6 +13,11 @@ type variable =
 	; var_typ  : typ
 	}
 
+module Variable : sig
+	type t = variable
+	val compare : t -> t -> int
+end
+
 type semantics =
 | SPosition
 

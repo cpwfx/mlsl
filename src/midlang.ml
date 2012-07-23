@@ -18,6 +18,11 @@ type variable =
 	; var_typ  : typ
 	}
 
+module Variable = struct
+	type t = variable
+	let compare x y = compare x.var_id y.var_id
+end
+
 type semantics =
 | SPosition
 
