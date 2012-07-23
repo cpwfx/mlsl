@@ -33,6 +33,7 @@ type instr =
 | IMov     of variable * variable
 | IMulFF   of variable * variable * variable
 | IMulMV44 of variable * variable * variable
+| IMulVF4  of variable * variable * variable
 | IRet     of variable
 
 type shader =
@@ -255,8 +256,21 @@ let rec unfold_code vertex code gamma expr =
 			end
 		end
 	| MlslAst.EVarying x ->
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EVarying.";
-		None
+		if vertex then begin
+			Errors.error_p expr.MlslAst.e_pos "Varying variables are not allowed in vertex shaders.";
+			None
+		end else begin try
+			let vr = Hashtbl.find varying_map x in
+			Some (
+				{ rv_pos  = expr.MlslAst.e_pos
+				; rv_kind = RVReg vr
+				}, code)
+		with
+		| Not_found ->
+			Errors.error_p expr.MlslAst.e_pos (Printf.sprintf 
+				"Undefinded varying variable $%s." x);
+			None
+		end
 	| MlslAst.EInt n ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EInt.";
 		None
@@ -279,6 +293,7 @@ let rec unfold_code vertex code gamma expr =
 					match r1.var_typ, r2.var_typ with
 					| TFloat, TFloat -> Some (TFloat, fun r1 r2 r3 -> IMulFF(r1, r2, r3))
 					| TMat44, TVec4  -> Some (TVec4,  fun r1 r2 r3 -> IMulMV44(r1, r2, r3))
+					| TVec4, TFloat  -> Some (TVec4,  fun r1 r2 r3 -> IMulVF4(r1, r2, r3))
 					| t1, t2 ->
 						Errors.error_p expr.MlslAst.e_pos
 							(Printf.sprintf "Multiplication for types %s * %s is not defined."
@@ -301,8 +316,8 @@ let rec unfold_code vertex code gamma expr =
 				None
 		))
 
-let unfold_vertex code gamma expr =
-	Misc.Opt.bind (unfold_code true code gamma expr) (fun (reg_val, code') ->
+let unfold_vertex gamma expr =
+	Misc.Opt.bind (unfold_code true (Misc.ImpList.create ()) gamma expr) (fun (reg_val, code) ->
 	match reg_val.rv_kind with
 	| RVRecord rd ->
 		if not (StrMap.mem "position" rd) then begin
@@ -347,9 +362,27 @@ let unfold_vertex code gamma expr =
 		None
 	)
 
-let unfold_fragment code gamma expr =
-	Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_fragment.";
-	None
+let unfold_fragment gamma expr =
+	Misc.Opt.bind (unfold_code false (Misc.ImpList.create ()) gamma expr) (fun (reg_val, code) ->
+	match reg_val.rv_kind with
+	| RVReg col ->
+		begin match col.var_typ with
+		| TVec4 ->
+			Misc.ImpList.add code (IRet col);
+			Some code
+		| tp ->
+			Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+				"Result position of fragment shader defined at %s has type %s, but expected vec4."
+				(Errors.string_of_pos reg_val.rv_pos)
+				(string_of_typ tp)
+			); None
+		end
+	| _ ->
+		Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+			"Result of fragment shader defined at %s is not a primitive value."
+			(Errors.string_of_pos reg_val.rv_pos)
+		); None
+	)
 
 let unfold_shader name expr =
 	credits := 1024;
@@ -362,8 +395,8 @@ let unfold_shader name expr =
 				Hashtbl.clear v_const_map;
 				Hashtbl.clear f_const_map;
 				Hashtbl.clear varying_map;
-				Misc.Opt.bind (unfold_vertex (Misc.ImpList.create ()) vs_gamma vs_code) (fun vertex ->
-				Misc.Opt.bind (unfold_fragment (Misc.ImpList.create ()) fs_gamma fs_code) (fun fragment ->
+				Misc.Opt.bind (unfold_vertex vs_gamma vs_code) (fun vertex ->
+				Misc.Opt.bind (unfold_fragment fs_gamma fs_code) (fun fragment ->
 					Some
 						{ sh_name     = name
 						; sh_attr     = create_attr_list ()

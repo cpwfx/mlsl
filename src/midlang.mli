@@ -28,9 +28,10 @@ type param =
 	}
 
 type instr =
-| IMov   of variable * variable
-| IMulFF of variable * variable * variable
+| IMov     of variable * variable
+| IMulFF   of variable * variable * variable
 | IMulMV44 of variable * variable * variable
+| IMulVF4  of variable * variable * variable
 | IRet     of variable
 
 type shader =
