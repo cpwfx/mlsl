@@ -27,12 +27,18 @@ type param =
 	; param_var  : variable
 	}
 
-type instr =
+type instr_kind =
 | IMov     of variable * variable
 | IMulFF   of variable * variable * variable
 | IMulMV44 of variable * variable * variable
 | IMulVF4  of variable * variable * variable
 | IRet     of variable
+type instr =
+	{ ins_id   : int
+	; ins_kind : instr_kind
+	}
+
+val create_instr : instr_kind -> instr
 
 type shader =
 	{ sh_name     : string

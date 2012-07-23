@@ -2,7 +2,7 @@ SRCDIR=src
 OBJDIR=obj
 BINDIR=bin
 OCAMLFILES=misc listExt errors mlslAst parserMisc mlslParser mlslLexer parser \
-	typeWorlds topDef typeCheck midlang agal
+	typeWorlds topDef typeCheck midlang dataflow agal
 .PHONY: all mlslYacc clean
 
 all: $(OBJDIR) $(BINDIR) \

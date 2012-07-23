@@ -2,6 +2,12 @@
 
 exception InternalError
 
+module Fresh : sig
+	type t
+	val create : unit -> t
+	val next : t -> int
+end
+
 module Int : sig
 	type t = int
 	val compare : t -> t -> int

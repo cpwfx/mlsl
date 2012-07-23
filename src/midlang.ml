@@ -2,6 +2,9 @@
 
 module StrMap = Map.Make(String)
 
+let instr_fresh = Misc.Fresh.create ()
+let var_fresh   = Misc.Fresh.create ()
+
 type typ =
 | TFloat
 | TInt
@@ -29,12 +32,21 @@ type param =
 	; param_var  : variable
 	}
 
-type instr =
+type instr_kind =
 | IMov     of variable * variable
 | IMulFF   of variable * variable * variable
 | IMulMV44 of variable * variable * variable
 | IMulVF4  of variable * variable * variable
 | IRet     of variable
+type instr =
+	{ ins_id   : int
+	; ins_kind : instr_kind
+	}
+
+let create_instr kind =
+	{ ins_id   = Misc.Fresh.next instr_fresh
+	; ins_kind = kind
+	}
 
 type shader =
 	{ sh_name     : string
@@ -57,14 +69,8 @@ let string_of_typ tp =
 
 (* ========================================================================= *)
 
-let fresh_id = ref 0
-let fresh () =
-	let id = !fresh_id in
-	fresh_id := id + 1;
-	id
-
 let create_var_ast ast_typ =
-	{ var_id = fresh ()
+	{ var_id = Misc.Fresh.next var_fresh
 	; var_typ =
 		match ast_typ with
 		| MlslAst.TFloat -> TFloat
@@ -79,7 +85,7 @@ let create_var_ast ast_typ =
 	}
 
 let create_variable typ =
-	{ var_id  = fresh ()
+	{ var_id  = Misc.Fresh.next var_fresh
 	; var_typ = typ
 	}
 
@@ -301,7 +307,7 @@ let rec unfold_code vertex code gamma expr =
 						None
 					) (fun (rtp, cons) ->
 						let rreg = create_variable rtp in
-						Misc.ImpList.add code (cons rreg r1 r2);
+						Misc.ImpList.add code (create_instr (cons rreg r1 r2));
 						( { rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }, code )
 					)
 			| RVRecord _, _ ->
@@ -341,7 +347,7 @@ let unfold_vertex gamma expr =
 			| RVReg rr ->
 				begin match rr.var_typ with
 				| TVec4 ->
-					Misc.ImpList.add code (IRet rr);
+					Misc.ImpList.add code (create_instr (IRet rr));
 					if ok then Some code
 					else None
 				| tp ->
@@ -368,7 +374,7 @@ let unfold_fragment gamma expr =
 	| RVReg col ->
 		begin match col.var_typ with
 		| TVec4 ->
-			Misc.ImpList.add code (IRet col);
+			Misc.ImpList.add code (create_instr (IRet col));
 			Some code
 		| tp ->
 			Errors.error_p expr.MlslAst.e_pos (Printf.sprintf

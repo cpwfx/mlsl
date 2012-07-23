@@ -2,6 +2,15 @@
 
 exception InternalError
 
+module Fresh = struct
+	type t = int ref
+	let create () = ref 0
+	let next f =
+		let res = !f in
+		f := res + 1;
+		res
+end
+
 module Int = struct
 	type t = int
 	let compare (x : t) (y : t) = compare x y
