@@ -8,9 +8,16 @@ type typ =
 | TVec3
 | TVec4
 
+type variable_sort =
+| VSAttribute
+| VSConstant
+| VSTemporary
+| VSVarying
+
 type variable =
 	{ var_id   : int
 	; var_typ  : typ
+	; var_sort : variable_sort
 	}
 
 module Variable : sig
@@ -32,11 +39,16 @@ type param =
 	; param_var  : variable
 	}
 
+type dim =
+| Dim2
+| Dim3
+| Dim4
+
 type instr_kind =
 | IMov     of variable * variable
 | IMulFF   of variable * variable * variable
-| IMulMV44 of variable * variable * variable
-| IMulVF4  of variable * variable * variable
+| IMulMV   of variable * variable * variable * dim * dim
+| IMulVF   of variable * variable * variable * dim
 | IRet     of variable
 type instr =
 	{ ins_id   : int

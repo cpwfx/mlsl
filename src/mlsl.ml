@@ -23,8 +23,9 @@ let _ =
 					let mprog_opt = Midlang.optimize mprog in
 					Misc.Opt.iter (Agal.build mprog_opt) (fun aprog ->
 					let aprog_opt = Agal.optimize aprog in
-					add_final_action (Agal.write aprog_opt)
-					)))
+					Misc.Opt.iter (Agal.finalize aprog_opt) (fun aprog_fin ->
+					add_final_action (Agal.write aprog_fin)
+					))))
 			else ()
 		| None -> ()
 		with

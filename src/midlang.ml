@@ -13,9 +13,16 @@ type typ =
 | TVec3
 | TVec4
 
+type variable_sort =
+| VSAttribute
+| VSConstant
+| VSTemporary
+| VSVarying
+
 type variable =
 	{ var_id   : int
 	; var_typ  : typ
+	; var_sort : variable_sort
 	}
 
 module Variable = struct
@@ -37,11 +44,16 @@ type param =
 	; param_var  : variable
 	}
 
+type dim =
+| Dim2
+| Dim3
+| Dim4
+
 type instr_kind =
 | IMov     of variable * variable
 | IMulFF   of variable * variable * variable
-| IMulMV44 of variable * variable * variable
-| IMulVF4  of variable * variable * variable
+| IMulMV   of variable * variable * variable * dim * dim
+| IMulVF   of variable * variable * variable * dim
 | IRet     of variable
 type instr =
 	{ ins_id   : int
@@ -74,10 +86,10 @@ let string_of_typ tp =
 
 (* ========================================================================= *)
 
-let create_var_ast ast_typ =
+let create_var_ast sort ast_typ =
 	{ var_id = Misc.Fresh.next var_fresh
 	; var_typ =
-		match ast_typ with
+		begin match ast_typ with
 		| MlslAst.TFloat -> TFloat
 		| MlslAst.TInt   -> TInt
 		| MlslAst.TMat44 -> TMat44
@@ -87,11 +99,14 @@ let create_var_ast ast_typ =
 		| MlslAst.TBool | MlslAst.TUnit | MlslAst.TArrow _ | MlslAst.TPair _
 		| MlslAst.TRecord _ | MlslAst.TVertex _ | MlslAst.TFragment _
 		| MlslAst.TVertexTop -> raise Misc.InternalError
+		end
+	; var_sort = sort
 	}
 
-let create_variable typ =
-	{ var_id  = Misc.Fresh.next var_fresh
-	; var_typ = typ
+let create_variable sort typ =
+	{ var_id   = Misc.Fresh.next var_fresh
+	; var_typ  = typ
+	; var_sort = sort
 	}
 
 (* ========================================================================= *)
@@ -238,7 +253,7 @@ let rec unfold_code vertex code gamma expr =
 								Hashtbl.find attr_map name
 							with
 							| Not_found ->
-								let v = create_var_ast typ.MlslAst.tt_typ in
+								let v = create_var_ast VSAttribute typ.MlslAst.tt_typ in
 								Hashtbl.add attr_map name v;
 								v
 							)
@@ -256,7 +271,7 @@ let rec unfold_code vertex code gamma expr =
 							Hashtbl.find const_map name
 						with
 						| Not_found ->
-							let v = create_var_ast typ.MlslAst.tt_typ in
+							let v = create_var_ast VSConstant typ.MlslAst.tt_typ in
 							Hashtbl.add const_map name v;
 							v
 						)
@@ -303,15 +318,15 @@ let rec unfold_code vertex code gamma expr =
 				Misc.Opt.map_f (
 					match r1.var_typ, r2.var_typ with
 					| TFloat, TFloat -> Some (TFloat, fun r1 r2 r3 -> IMulFF(r1, r2, r3))
-					| TMat44, TVec4  -> Some (TVec4,  fun r1 r2 r3 -> IMulMV44(r1, r2, r3))
-					| TVec4, TFloat  -> Some (TVec4,  fun r1 r2 r3 -> IMulVF4(r1, r2, r3))
+					| TMat44, TVec4  -> Some (TVec4,  fun r1 r2 r3 -> IMulMV(r1, r2, r3, Dim4, Dim4))
+					| TVec4, TFloat  -> Some (TVec4,  fun r1 r2 r3 -> IMulVF(r1, r2, r3, Dim4))
 					| t1, t2 ->
 						Errors.error_p expr.MlslAst.e_pos
 							(Printf.sprintf "Multiplication for types %s * %s is not defined."
 								(string_of_typ t1) (string_of_typ t2));
 						None
 					) (fun (rtp, cons) ->
-						let rreg = create_variable rtp in
+						let rreg = create_variable VSTemporary rtp in
 						Misc.ImpList.add code (create_instr (cons rreg r1 r2));
 						( { rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }, code )
 					)
@@ -341,7 +356,10 @@ let unfold_vertex gamma expr =
 				if v_name = "position" then st
 				else match v_rv.rv_kind with
 				| RVReg vr ->
-					Hashtbl.add varying_map v_name vr; st
+					let vv = create_variable VSVarying vr.var_typ in
+					Misc.ImpList.add code (create_instr (IMov(vv, vr)));
+					Hashtbl.add varying_map v_name vv; 
+					st
 				| _ ->
 					Errors.error_p expr.MlslAst.e_pos 
 						(Printf.sprintf "Field %s defined at %s is not a primitive value."
