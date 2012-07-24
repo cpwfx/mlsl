@@ -60,6 +60,8 @@ type source =
 
 type instr_kind =
 | IMov of dest * source
+| IMul of dest * source * source
+| IM44 of dest * source * source
 type instr =
 	{ ins_id   : int
 	; ins_kind : instr_kind

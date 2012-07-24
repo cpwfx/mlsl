@@ -5,13 +5,22 @@ module StrMap = Map.Make(String)
 let instr_fresh = Misc.Fresh.create ()
 let var_fresh   = Misc.Fresh.create ()
 
+type dim =
+| Dim2
+| Dim3
+| Dim4
+
+let int_of_dim d =
+	match d with
+	| Dim2 -> 2
+	| Dim3 -> 3
+	| Dim4 -> 4
+
 type typ =
 | TFloat
 | TInt
-| TMat44
-| TVec2
-| TVec3
-| TVec4
+| TMat of dim * dim
+| TVec of dim
 
 type variable_sort =
 | VSAttribute
@@ -44,11 +53,6 @@ type param =
 	; param_var  : variable
 	}
 
-type dim =
-| Dim2
-| Dim3
-| Dim4
-
 type instr_kind =
 | IMov     of variable * variable
 | IMulFF   of variable * variable * variable
@@ -77,12 +81,10 @@ type shader =
 
 let string_of_typ tp =
 	match tp with
-	| TFloat -> "float"
-	| TInt   -> "int"
-	| TMat44 -> "mat44"
-	| TVec2  -> "vec2"
-	| TVec3  -> "vec3"
-	| TVec4  -> "vec4"
+	| TFloat       -> "float"
+	| TInt         -> "int"
+	| TMat(d1, d2) -> Printf.sprintf "mat%d%d" (int_of_dim d1) (int_of_dim d2)
+	| TVec d       -> Printf.sprintf "vec%d" (int_of_dim d)
 
 (* ========================================================================= *)
 
@@ -92,10 +94,10 @@ let create_var_ast sort ast_typ =
 		begin match ast_typ with
 		| MlslAst.TFloat -> TFloat
 		| MlslAst.TInt   -> TInt
-		| MlslAst.TMat44 -> TMat44
-		| MlslAst.TVec2  -> TVec2
-		| MlslAst.TVec3  -> TVec3
-		| MlslAst.TVec4  -> TVec4
+		| MlslAst.TMat44 -> TMat(Dim4, Dim4)
+		| MlslAst.TVec2  -> TVec Dim2
+		| MlslAst.TVec3  -> TVec Dim3
+		| MlslAst.TVec4  -> TVec Dim4
 		| MlslAst.TBool | MlslAst.TUnit | MlslAst.TArrow _ | MlslAst.TPair _
 		| MlslAst.TRecord _ | MlslAst.TVertex _ | MlslAst.TFragment _
 		| MlslAst.TVertexTop -> raise Misc.InternalError
@@ -318,8 +320,9 @@ let rec unfold_code vertex code gamma expr =
 				Misc.Opt.map_f (
 					match r1.var_typ, r2.var_typ with
 					| TFloat, TFloat -> Some (TFloat, fun r1 r2 r3 -> IMulFF(r1, r2, r3))
-					| TMat44, TVec4  -> Some (TVec4,  fun r1 r2 r3 -> IMulMV(r1, r2, r3, Dim4, Dim4))
-					| TVec4, TFloat  -> Some (TVec4,  fun r1 r2 r3 -> IMulVF(r1, r2, r3, Dim4))
+					| TMat(d1, d2), TVec d when d2 = d -> 
+						Some (TVec d1,  fun r1 r2 r3 -> IMulMV(r1, r2, r3, d1, d2))
+					| TVec d, TFloat  -> Some (TVec d,  fun r1 r2 r3 -> IMulVF(r1, r2, r3, d))
 					| t1, t2 ->
 						Errors.error_p expr.MlslAst.e_pos
 							(Printf.sprintf "Multiplication for types %s * %s is not defined."
@@ -369,7 +372,7 @@ let unfold_vertex gamma expr =
 			match (StrMap.find "position" rd).rv_kind with
 			| RVReg rr ->
 				begin match rr.var_typ with
-				| TVec4 ->
+				| TVec Dim4 ->
 					Misc.ImpList.add code (create_instr (IRet rr));
 					if ok then Some code
 					else None
@@ -396,7 +399,7 @@ let unfold_fragment gamma expr =
 	match reg_val.rv_kind with
 	| RVReg col ->
 		begin match col.var_typ with
-		| TVec4 ->
+		| TVec Dim4 ->
 			Misc.ImpList.add code (create_instr (IRet col));
 			Some code
 		| tp ->

@@ -1,12 +1,17 @@
 (* File: midlang.mli *)
 
+type dim =
+| Dim2
+| Dim3
+| Dim4
+
+val int_of_dim : dim -> int
+
 type typ =
 | TFloat
 | TInt
-| TMat44
-| TVec2
-| TVec3
-| TVec4
+| TMat of dim * dim
+| TVec of dim
 
 type variable_sort =
 | VSAttribute
@@ -38,11 +43,6 @@ type param =
 	{ param_name : string
 	; param_var  : variable
 	}
-
-type dim =
-| Dim2
-| Dim3
-| Dim4
 
 type instr_kind =
 | IMov     of variable * variable
