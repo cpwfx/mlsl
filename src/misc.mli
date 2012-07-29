@@ -22,6 +22,7 @@ end
 
 module ListExt : sig
 	type 'a t = 'a list
+	val is_empty : 'a list -> bool
 	val map_filter : ('a -> 'b option) -> 'a list -> 'b list
 	val opt_fold_left : ('a -> 'b -> 'b option) -> 'b option -> 'a list -> 'b option
 end

@@ -25,8 +25,8 @@ type const_named =
 	}
 
 type const_value =
-	{ cv_size  : int * int
-	; cv_value : float array array
+	{ cv_value : float array array
+	; cv_var   : variable
 	}
 
 type const =

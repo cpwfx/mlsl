@@ -25,6 +25,10 @@ end
 
 module ListExt = struct
 	type 'a t = 'a list
+	let is_empty l =
+		match l with
+		| [] -> true
+		| _ :: _ -> false
 	let rec map_filter f l =
 		match l with
 		| [] -> []

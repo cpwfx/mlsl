@@ -25,8 +25,8 @@ type const_named =
 	}
 
 type const_value =
-	{ cv_size  : int * int
-	; cv_value : float array array
+	{ cv_value : float array array
+	; cv_var   : variable
 	}
 
 type const =
@@ -80,6 +80,13 @@ type shader =
 	; sh_vertex   : instr list
 	; sh_fragment : instr list
 	}
+
+(* ========================================================================= *)
+
+let variable_of_const c =
+	match c with
+	| ConstNamed cn -> cn.cn_var
+	| ConstValue cv -> cv.cv_var
 
 (* ========================================================================= *)
 
@@ -258,9 +265,129 @@ let build sh =
 (* TODO: better optimizer *)
 let optimize sh = sh
 
+(* ========================================================================= *)
+
+module Variable = struct
+	type t = variable
+	let compare v1 v2 = compare v1.var_id v2.var_id
+end
+
+module VarSet = Set.Make(Variable)
+
+module LiveVar = struct
+	let entry_tab = Hashtbl.create 32
+	let exit_tab = Hashtbl.create 32
+
+	let transfer instr a =
+		match instr.ins_kind with
+		| IMov(dest, src) -> VarSet.add src.src_var a
+		| IM44(dest, src1, src2) | IMul(dest, src1, src2) -> 
+			VarSet.add src1.src_var (VarSet.add src2.src_var a)
+
+	let rec compute_loop last code =
+		match code with
+		| [] -> ()
+		| instr :: code ->
+			Hashtbl.replace exit_tab instr.ins_id last;
+			let next = transfer instr last in
+			Hashtbl.replace entry_tab instr.ins_id next;
+			compute_loop next code
+
+	let compute code =
+		compute_loop VarSet.empty (List.rev code)
+
+	let is_alive ins var =
+		VarSet.mem var (Hashtbl.find exit_tab ins.ins_id)
+end
+
+let rec bind_glob_registers' free name cnt vars =
+	match vars with
+	| [] -> true
+	| v::vars ->
+		v.var_reg <- Some (free, 0);
+		let free = free + fst v.var_size in
+		if free < cnt then
+			bind_glob_registers' free name cnt vars
+		else begin
+			Errors.error (Printf.sprintf "I can't pack %s into %d registers"
+				name cnt);
+			false
+		end
+
+let bind_glob_registers name cnt vars =
+	bind_glob_registers' 0 name cnt vars
+
+let bind_register_var reg_map shader var =
+	let (sz_reg, sz_fld) = var.var_size in
+	let alloc_var reg fld =
+		for ri = 0 to sz_reg - 1 do
+			for fi = 0 to sz_fld - 1 do
+				reg_map.(reg + ri).(fld + fi) <- var :: reg_map.(reg + ri).(fld + fi)
+			done
+		done
+	in
+	let rec can_alloc ri fi reg fld =
+		if ri >= sz_reg then true
+		else if fi >= sz_fld then
+			can_alloc (ri + 1) 0 reg fld
+		else
+			(reg + ri < Array.length reg_map)
+			&& (fld + fi < 4)
+			&& (Misc.ListExt.is_empty reg_map.(reg + ri).(fld + fi))
+			&& can_alloc ri (fi + 1) reg fld
+	in
+	let rec alloc_loop reg fld =
+		if reg >= Array.length reg_map then begin
+			Errors.error (Printf.sprintf
+				"Can not alloc all temporary variables in %s shader." shader);
+			false
+		end else if fld >= 4 then
+			alloc_loop (reg + 1) 0
+		else if can_alloc 0 0 reg fld then begin
+			alloc_var reg fld;
+			var.var_reg <- Some(reg, fld);
+			true
+		end else
+			alloc_loop reg (fld+1)
+	in
+	match var.var_reg with
+	| Some _ -> true
+	| None ->
+		alloc_loop 0 0
+
+let rec bind_registers' reg_map shader code =
+	match code with
+	| [] -> true
+	| ins :: code ->
+		Array.iter (fun field_map ->
+			Array.iteri (fun i vars -> 
+				field_map.(i) <-
+					List.filter (LiveVar.is_alive ins) vars
+			) field_map) reg_map;
+		begin match ins.ins_kind with
+		| IMov(dest, _) | IMul(dest, _, _) | IM44(dest, _, _) ->
+			bind_register_var reg_map shader dest.dst_var
+		end && bind_registers' reg_map shader code
+
+let bind_registers shader cnt code =
+	let reg_map = Array.init cnt (fun _ -> Array.make 4 []) in
+	bind_registers' reg_map shader code
+
 let finalize sh =
-	Errors.error "Unimplemented: Agal.finalize.";
-	None
+	let ok =
+		bind_glob_registers "vertex shader constants" 128 
+			(List.map variable_of_const sh.sh_glob.shg_v_const) &&
+		bind_glob_registers "fragment shader constants" 28 
+			(List.map variable_of_const sh.sh_glob.shg_f_const) &&
+		bind_glob_registers "varying registers" 
+			8 sh.sh_glob.shg_varying &&
+		(LiveVar.compute sh.sh_vertex;   bind_registers "vertex" 8 sh.sh_vertex) &&
+		(LiveVar.compute sh.sh_fragment; bind_registers "fragment" 8 sh.sh_fragment)
+	in
+	if ok then Some sh
+	else None
+
+(* ========================================================================= *)
 
 let write sh () =
 	Errors.error "Unimplemented: Agal.write."
