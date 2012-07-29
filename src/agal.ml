@@ -16,11 +16,13 @@ type variable =
 
 type attr =
 	{ attr_name      : string
+	; attr_typ       : Midlang.typ
 	; attr_var       : variable
 	}
 
 type const_named =
 	{ cn_name : string
+	; cn_typ  : Midlang.typ
 	; cn_var  : variable
 	}
 
@@ -83,6 +85,14 @@ type shader =
 
 (* ========================================================================= *)
 
+let varsort_to_int sort =
+	match sort with
+	| VSAttribute -> 0
+	| VSConstant  -> 1
+	| VSTemporary -> 2
+	| VSOutput    -> 3
+	| VSVarying   -> 4
+
 let variable_of_const c =
 	match c with
 	| ConstNamed cn -> cn.cn_var
@@ -131,12 +141,14 @@ let map_attr_variable attr =
 
 let map_attr attr =
 	{ attr_name = attr.Midlang.attr_name
+	; attr_typ  = attr.Midlang.attr_var.Midlang.var_typ
 	; attr_var  = map_attr_variable attr
 	}
 
 let map_const const =
 	ConstNamed
 		{ cn_name = const.Midlang.param_name
+		; cn_typ  = const.Midlang.param_var.Midlang.var_typ
 		; cn_var  = map_variable const.Midlang.param_var
 		}
 
@@ -389,5 +401,140 @@ let finalize sh =
 
 (* ========================================================================= *)
 
+let create_attr_json attrs =
+	Json.JsList (Json.create_list (List.map (fun attr ->
+		Json.JsObj (Json.create_obj
+		[ "name",        Json.JsString attr.attr_name
+		; "type",        Json.JsString (Midlang.string_of_typ attr.attr_typ)
+		; "register",    Json.JsInt (fst (Misc.Opt.value attr.attr_var.var_reg))
+		; "fieldOffset", Json.JsInt (snd (Misc.Opt.value attr.attr_var.var_reg))
+		])) attrs))
+
+let create_const_json const =
+	let named_const = Json.create_list [] in
+	let value_const = Json.create_list [] in
+	List.iter (fun c ->
+		match c with
+		| ConstNamed cn ->
+			Json.list_add named_const (Json.JsObj (Json.create_obj
+				[ "name",        Json.JsString cn.cn_name
+				; "type",        Json.JsString (Midlang.string_of_typ cn.cn_typ)
+				; "register",    Json.JsInt (fst (Misc.Opt.value cn.cn_var.var_reg))
+				; "fieldOffset", Json.JsInt (snd (Misc.Opt.value cn.cn_var.var_reg))
+				]))
+		| ConstValue cv ->
+			Errors.error "Unimplemented Agal.create_const_json ConstValue"
+	) const;
+	Json.JsObj (Json.create_obj 
+		[ "params", Json.JsList named_const
+		; "values", Json.JsList value_const
+		])
+
+let create_mask_bin mask offset =
+	(
+		(if mask.dmask_x then 1 else 0) lor
+		(if mask.dmask_y then 2 else 0) lor
+		(if mask.dmask_z then 4 else 0) lor
+		(if mask.dmask_w then 8 else 0)
+	) lsl offset
+
+let write_dest out dst =
+	(* Register number *)
+	LittleEndian.write_short out 
+		(dst.dst_row + (fst (Misc.Opt.value dst.dst_var.var_reg)));
+	(* Write mask *)
+	LittleEndian.write_byte out 
+		(create_mask_bin dst.dst_mask (snd (Misc.Opt.value dst.dst_var.var_reg)));
+	(* Register type *)
+	LittleEndian.write_byte out (varsort_to_int dst.dst_var.var_sort)
+
+let create_swizzle_bin swizzle fld_offset dest_offset =
+	let comp0 =
+		if dest_offset > 0 then 0 
+		else swizzle.(0 - dest_offset) + fld_offset in
+	let comp1 =
+		if dest_offset > 1 then 0 
+		else swizzle.(1 - dest_offset) + fld_offset in
+	let comp2 =
+		if dest_offset > 2 then 0 
+		else swizzle.(2 - dest_offset) + fld_offset in
+	let comp3 =
+		if dest_offset > 3 then 0 
+		else swizzle.(3 - dest_offset) + fld_offset in
+	(comp0 land 3) lor
+	((comp1 land 3) lsl 2) lor
+	((comp2 land 3) lsl 4) lor
+	((comp3 land 3) lsl 6)
+
+let write_source out src dest_offset =
+	(* Register number *)
+	LittleEndian.write_short out
+		(src.src_row + (fst (Misc.Opt.value src.src_var.var_reg)));
+	(* Indirect offset *)
+	begin match src.src_offset with
+	| None -> (* direct *)
+		LittleEndian.write_byte out 0
+	| Some off -> (* indirect *)
+		LittleEndian.write_byte out
+			(off.srcoff_row + (fst (Misc.Opt.value off.srcoff_var.var_reg)))
+	end;
+	(* Swizzle *)
+	LittleEndian.write_byte out 
+		(create_swizzle_bin src.src_swizzle (snd (Misc.Opt.value src.src_var.var_reg)) dest_offset);
+	(* Register type *)
+	LittleEndian.write_byte out (varsort_to_int src.src_var.var_sort);
+	(* Indirect offset *)
+	begin match src.src_offset with
+	| None -> (* direct *)
+		LittleEndian.write_byte  out 0;
+		LittleEndian.write_short out 0x0080
+	| Some off ->
+		(* Index register type *)
+		LittleEndian.write_byte out (varsort_to_int off.srcoff_var.var_sort);
+		(* Index register component select *)
+		LittleEndian.write_byte out 
+			(off.srcoff_component + snd (Misc.Opt.value off.srcoff_var.var_reg));
+		(* Indirect flag *)
+		LittleEndian.write_byte out 0x80
+	end
+
+let rec write_bytecode out code =
+	match code with
+	| [] -> ()
+	| ins :: code ->
+		begin match ins.ins_kind with
+		| IMov(dst, src) ->
+			LittleEndian.write_int out 0x00;
+			write_dest out dst;
+			write_source out src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+			LittleEndian.write_int64 out Int64.zero (* dummy source *)
+		| IMul(dst, src1, src2) ->
+			LittleEndian.write_int out 0x03;
+			write_dest out dst;
+			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		| IM44(dst, src1, src2) ->
+			LittleEndian.write_int out 0x18;
+			write_dest out dst;
+			write_source out src1 0;
+			write_source out src2 0
+		end;
+		write_bytecode out code
+
+let write_program vertex path code =
+	Misc.IO.with_out_channel path true (fun out ->
+		LittleEndian.write_byte out 0xA0;                      (* magic        *)
+		LittleEndian.write_int  out 0x01;                      (* version      *)
+		LittleEndian.write_byte out 0xA1;                      (* shadertypeid *)
+		LittleEndian.write_byte out (if vertex then 0 else 1); (* shadertype   *)
+		write_bytecode out code
+	)
+
 let write sh () =
-	Errors.error "Unimplemented: Agal.write."
+	Json.write (sh.sh_name ^ ".json") (Json.create_obj
+		[ "attr",   create_attr_json sh.sh_glob.shg_attr
+		; "vconst", create_const_json sh.sh_glob.shg_v_const
+		; "fconst", create_const_json sh.sh_glob.shg_f_const
+		]);
+	write_program true  (sh.sh_name ^ ".vs") sh.sh_vertex;
+	write_program false (sh.sh_name ^ ".fs") sh.sh_fragment

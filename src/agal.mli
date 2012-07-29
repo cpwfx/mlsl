@@ -16,11 +16,13 @@ type variable =
 
 type attr =
 	{ attr_name      : string
+	; attr_typ       : Midlang.typ
 	; attr_var       : variable
 	}
 
 type const_named =
 	{ cn_name : string
+	; cn_typ  : Midlang.typ
 	; cn_var  : variable
 	}
 

@@ -17,7 +17,13 @@ module ImpList : sig
 	type 'a t
 	val add : 'a t -> 'a -> unit
 	val create : unit -> 'a t
+	val of_list : 'a list -> 'a t
 	val to_list : 'a t -> 'a list
+end
+
+module IO : sig
+	val try_close_out : out_channel -> unit
+	val with_out_channel : string -> bool -> (out_channel -> 'a) -> 'a
 end
 
 module ListExt : sig
@@ -32,4 +38,5 @@ module Opt : sig
 	val bind  : 'a t -> ('a -> 'b t) -> 'b t
 	val iter  : 'a t -> ('a -> unit) -> unit
 	val map_f : 'a t -> ('a -> 'b) -> 'b t
+	val value : 'a t -> 'a
 end

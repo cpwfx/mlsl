@@ -20,7 +20,20 @@ module ImpList = struct
 	type 'a t = ('a list) ref
 	let add l x = l := x :: !l
 	let create () = ref []
+	let of_list l = ref (List.rev l)
 	let to_list l = List.rev !l
+end
+
+module IO = struct
+	let try_close_out chan =
+		try close_out chan with
+		| Sys_error _ -> ()
+	let with_out_channel path binary f =
+		let chan = if binary then open_out_bin path else open_out path in
+		try let res = f chan in try_close_out chan; res with
+		| ex ->
+			try_close_out chan;
+			raise ex
 end
 
 module ListExt = struct
@@ -60,4 +73,8 @@ module Opt = struct
 		match a with
 		| None -> None
 		| Some av -> Some (f av)
+	let value a =
+		match a with
+		| None -> raise InternalError
+		| Some av -> av
 end

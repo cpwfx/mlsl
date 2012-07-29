@@ -158,7 +158,7 @@ let check_vertex_shader td name body =
 	| [] -> ()
 	| sol_raw ->
 		let sol     = List.filter is_vertex_type sol_raw in
-		if ListExt.is_empty sol then
+		if Misc.ListExt.is_empty sol then
 			Errors.error_p td.MlslAst.td_pos
 				("Vertex shader should have a type { position : vec4 ; ... }, " ^
 				"but types of this shader are:" ^ print_type_list sol_raw)
