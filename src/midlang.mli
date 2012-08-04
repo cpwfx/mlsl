@@ -6,6 +6,7 @@ type dim =
 | Dim4
 
 val int_of_dim : dim -> int
+val dim_of_ast : MlslAst.dim -> dim
 
 type typ =
 | TFloat

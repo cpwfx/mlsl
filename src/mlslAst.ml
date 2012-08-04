@@ -89,17 +89,20 @@ module Swizzle = struct
 				(max (component_id c3) (component_id c4))
 end
 
+type dim =
+| Dim2
+| Dim3
+| Dim4
+
 type typ =
 | TBool
 | TFloat
 | TInt
-| TMat44
+| TMat of dim * dim
 | TSampler2D
 | TSamplerCube
 | TUnit
-| TVec2
-| TVec3
-| TVec4
+| TVec of dim
 | TArrow    of typ * typ
 | TPair     of typ * typ
 | TRecord   of (string * typ) list
@@ -163,6 +166,12 @@ type topdef =
 	; td_kind : topdef_kind
 	}
 
+let int_of_dim d =
+	match d with
+	| Dim2 -> 2
+	| Dim3 -> 3
+	| Dim4 -> 4
+
 let make_expr pos kind =
 	{ e_pos  = pos
 	; e_kind = kind
@@ -180,13 +189,13 @@ let make_select pos expr field =
 
 let is_reg_type tp =
 	match tp with
-	| TBool | TFloat | TInt | TUnit | TVec2 | TVec3 | TVec4 -> true
-	| TSampler2D | TSamplerCube | TMat44 | TArrow _ | TPair _ | TRecord _ 
+	| TBool | TFloat | TInt | TUnit | TVec _ -> true
+	| TSampler2D | TSamplerCube | TMat _ | TArrow _ | TPair _ | TRecord _ 
 	| TVertex _ | TFragment _ | TVertexTop -> false
 
 let rec is_data_type tp =
 	match tp with
-	| TBool | TFloat | TInt | TMat44 | TUnit | TVec2 | TVec3 | TVec4 -> true
+	| TBool | TFloat | TInt | TMat _ | TUnit | TVec _ -> true
 	| TSampler2D | TSamplerCube | TArrow _ | TVertex _ | TFragment _ 
 	| TVertexTop -> false
 	| TRecord r -> List.for_all (fun (_, t) -> is_data_type t) r
@@ -195,22 +204,19 @@ let rec is_data_type tp =
 let rec is_sampler_type tp =
 	match tp with
 	| TSampler2D | TSamplerCube -> true
-	| TBool | TFloat | TInt | TMat44 | TUnit | TVec2 | TVec3 | TVec4
-	| TArrow _ | TPair _ | TRecord _ | TVertex _ | TFragment _ 
-	| TVertexTop -> false
+	| TBool | TFloat | TInt | TMat _ | TUnit | TVec _ | TArrow _ | TPair _ 
+	| TRecord _ | TVertex _ | TFragment _ | TVertexTop -> false
 
 let rec string_of_typ p tp =
 	match tp with
 	| TBool          -> "bool"
 	| TFloat         -> "float"
 	| TInt           -> "int"
-	| TMat44         -> "mat44"
+	| TMat(d1, d2)   -> Printf.sprintf "mat%d%d" (int_of_dim d1) (int_of_dim d2)
 	| TSampler2D     -> "sampler2D"
 	| TSamplerCube   -> "samplerCube"
 	| TUnit          -> "unit"
-	| TVec2          -> "vec2"
-	| TVec3          -> "vec3"
-	| TVec4          -> "vec4"
+	| TVec d         -> Printf.sprintf "vec%d" (int_of_dim d)
 	| TArrow(t1, t2) ->
 		let r = string_of_typ 1 t1 ^ " -> " ^ string_of_typ 0 t2 in
 		if p > 0 then "(" ^ r ^ ")" else r

@@ -12,19 +12,27 @@ type typ =
 | TBool
 | TFloat
 | TInt
-| TMat44
+| TMat of MlslAst.dim * MlslAst.dim
 | TSampler2D
 | TSamplerCube
 | TUnit
-| TVec2
-| TVec3
-| TVec4
+| TVec of MlslAst.dim
 | TArrow    of typ * typ
 | TPair     of typ * typ
 | TRecord   of (string * typ) list
 | TVertex   of (string * typ) list
 | TFragment of (string * typ) list
 | TVertexTop
+
+let tMat22 = TMat(MlslAst.Dim2, MlslAst.Dim2)
+let tMat23 = TMat(MlslAst.Dim2, MlslAst.Dim3)
+let tMat24 = TMat(MlslAst.Dim2, MlslAst.Dim4)
+let tMat32 = TMat(MlslAst.Dim3, MlslAst.Dim2)
+let tMat33 = TMat(MlslAst.Dim3, MlslAst.Dim3)
+let tMat34 = TMat(MlslAst.Dim3, MlslAst.Dim4)
+let tMat42 = TMat(MlslAst.Dim4, MlslAst.Dim2)
+let tMat43 = TMat(MlslAst.Dim4, MlslAst.Dim3)
+let tMat44 = TMat(MlslAst.Dim4, MlslAst.Dim4)
 
 type t = typ list StrMap.t
 
@@ -47,13 +55,11 @@ let rec to_ast world tp =
 	| TBool        -> MlslAst.TBool
 	| TFloat       -> MlslAst.TFloat
 	| TInt         -> MlslAst.TInt
-	| TMat44       -> MlslAst.TMat44
+	| TMat(d1, d2) -> MlslAst.TMat(d1, d2)
 	| TSampler2D   -> MlslAst.TSampler2D
 	| TSamplerCube -> MlslAst.TSamplerCube
 	| TUnit        -> MlslAst.TUnit
-	| TVec2        -> MlslAst.TVec2
-	| TVec3        -> MlslAst.TVec3
-	| TVec4        -> MlslAst.TVec4
+	| TVec d       -> MlslAst.TVec d
 	| TArrow(t1, t2) -> MlslAst.TArrow(to_ast world t1, to_ast world t2)
 	| TPair(t1, t2) -> MlslAst.TPair(to_ast world t1, to_ast world t2)
 	| TRecord rd -> MlslAst.TRecord(List.map (fun (n, t) -> (n, to_ast world t)) rd)
@@ -66,13 +72,11 @@ let rec of_ast tp =
 	| MlslAst.TBool        -> TBool
 	| MlslAst.TFloat       -> TFloat
 	| MlslAst.TInt         -> TInt
-	| MlslAst.TMat44       -> TMat44
+	| MlslAst.TMat(d1, d2) -> TMat(d1, d2)
 	| MlslAst.TSampler2D   -> TSampler2D
 	| MlslAst.TSamplerCube -> TSamplerCube
 	| MlslAst.TUnit        -> TUnit
-	| MlslAst.TVec2        -> TVec2
-	| MlslAst.TVec3        -> TVec3
-	| MlslAst.TVec4        -> TVec4
+	| MlslAst.TVec d       -> TVec d
 	| MlslAst.TArrow(t1, t2) -> TArrow(of_ast t1, of_ast t2)
 	| MlslAst.TPair(t1, t2) -> TPair(of_ast t1, of_ast t2)
 	| MlslAst.TRecord rd -> TRecord(List.map (fun (n, t) -> (n, of_ast t)) rd)

@@ -27,17 +27,20 @@ module Swizzle : sig
 	val max_component_id : t -> int
 end
 
+type dim =
+| Dim2
+| Dim3
+| Dim4
+
 type typ =
 | TBool
 | TFloat
 | TInt
-| TMat44
+| TMat of dim * dim
 | TSampler2D
 | TSamplerCube
 | TUnit
-| TVec2
-| TVec3
-| TVec4
+| TVec of dim
 | TArrow    of typ * typ
 | TPair     of typ * typ
 | TRecord   of (string * typ) list
@@ -100,6 +103,8 @@ type topdef =
 	{ td_pos  : Lexing.position
 	; td_kind : topdef_kind
 	}
+
+val int_of_dim : dim -> int
 
 val make_expr   : Lexing.position -> expr_kind -> expr
 val make_app    : expr -> expr list -> expr

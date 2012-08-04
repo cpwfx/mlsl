@@ -4,25 +4,6 @@ module IntSet = Set.Make(Misc.Int)
 module StrMap = Map.Make(String)
 module StrSet = Map.Make(String)
 
-let mul_types =
-	(*      op1        *       op2        =       value     *)
-	[ TypeWorlds.TFloat, TypeWorlds.TFloat, TypeWorlds.TFloat
-	; TypeWorlds.TFloat, TypeWorlds.TMat44, TypeWorlds.TMat44
-	; TypeWorlds.TFloat, TypeWorlds.TVec2,  TypeWorlds.TVec2
-	; TypeWorlds.TFloat, TypeWorlds.TVec3,  TypeWorlds.TVec3
-	; TypeWorlds.TFloat, TypeWorlds.TVec4,  TypeWorlds.TVec4
-	; TypeWorlds.TInt,   TypeWorlds.TInt,   TypeWorlds.TInt
-	; TypeWorlds.TMat44, TypeWorlds.TFloat, TypeWorlds.TMat44
-	; TypeWorlds.TMat44, TypeWorlds.TMat44, TypeWorlds.TMat44
-	; TypeWorlds.TMat44, TypeWorlds.TVec4,  TypeWorlds.TVec4
-	; TypeWorlds.TVec2,  TypeWorlds.TFloat, TypeWorlds.TVec2
-	; TypeWorlds.TVec2,  TypeWorlds.TVec2,  TypeWorlds.TVec2
-	; TypeWorlds.TVec3,  TypeWorlds.TFloat, TypeWorlds.TVec3
-	; TypeWorlds.TVec3,  TypeWorlds.TVec3,  TypeWorlds.TVec3
-	; TypeWorlds.TVec4,  TypeWorlds.TFloat, TypeWorlds.TVec4
-	; TypeWorlds.TVec4,  TypeWorlds.TVec4,  TypeWorlds.TVec4
-	]
-
 let check_field_uniqueness rd =
 	let rec check_uniqueness field_map rd =
 		match rd with
@@ -140,7 +121,7 @@ let is_vertex_type (world, tp) =
 	match tp with
 	| TypeWorlds.TRecord r ->
 		List.exists (fun (n, t) -> 
-				n = "position" && TypeWorlds.to_ast world t = MlslAst.TVec4
+				n = "position" && TypeWorlds.to_ast world t = MlslAst.TVec MlslAst.Dim4
 			) r
 	| _ -> false
 

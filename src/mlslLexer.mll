@@ -10,6 +10,14 @@ let _ =
 	Hashtbl.add kw_map "fragment"    MlslParser.KW_FRAGMENT;
 	Hashtbl.add kw_map "int"         MlslParser.KW_INT;
 	Hashtbl.add kw_map "let"         MlslParser.KW_LET;
+	Hashtbl.add kw_map "mat22"       MlslParser.KW_MAT22;
+	Hashtbl.add kw_map "mat23"       MlslParser.KW_MAT23;
+	Hashtbl.add kw_map "mat24"       MlslParser.KW_MAT24;
+	Hashtbl.add kw_map "mat32"       MlslParser.KW_MAT32;
+	Hashtbl.add kw_map "mat33"       MlslParser.KW_MAT33;
+	Hashtbl.add kw_map "mat34"       MlslParser.KW_MAT34;
+	Hashtbl.add kw_map "mat42"       MlslParser.KW_MAT42;
+	Hashtbl.add kw_map "mat43"       MlslParser.KW_MAT43;
 	Hashtbl.add kw_map "mat44"       MlslParser.KW_MAT44;
 	Hashtbl.add kw_map "sampler"     MlslParser.KW_SAMPLER;
 	Hashtbl.add kw_map "sampler2D"   MlslParser.KW_SAMPLER2D;

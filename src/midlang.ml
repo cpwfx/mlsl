@@ -17,6 +17,12 @@ let int_of_dim d =
 	| Dim3 -> 3
 	| Dim4 -> 4
 
+let dim_of_ast d =
+	match d with
+	| MlslAst.Dim2 -> Dim2
+	| MlslAst.Dim3 -> Dim3
+	| MlslAst.Dim4 -> Dim4
+
 type typ =
 | TFloat
 | TInt
@@ -128,10 +134,8 @@ let create_var_ast sort ast_typ =
 		begin match ast_typ with
 		| MlslAst.TFloat -> TFloat
 		| MlslAst.TInt   -> TInt
-		| MlslAst.TMat44 -> TMat(Dim4, Dim4)
-		| MlslAst.TVec2  -> TVec Dim2
-		| MlslAst.TVec3  -> TVec Dim3
-		| MlslAst.TVec4  -> TVec Dim4
+		| MlslAst.TMat(d1, d2) -> TMat(dim_of_ast d1, dim_of_ast d2)
+		| MlslAst.TVec d       -> TVec(dim_of_ast d)
 		| MlslAst.TBool | MlslAst.TSampler2D | MlslAst.TSamplerCube 
 		| MlslAst.TUnit | MlslAst.TArrow _ | MlslAst.TPair _
 		| MlslAst.TRecord _ | MlslAst.TVertex _ | MlslAst.TFragment _

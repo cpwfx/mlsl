@@ -4,7 +4,8 @@
 %token EOF
 %token BR_OPN BR_CLS CBR_OPN CBR_CLS
 %token ARROW COLON COMMA DOT EQ MUL SEMI
-%token KW_ATTR KW_BOOL KW_CONST KW_FLOAT KW_FRAGMENT KW_INT KW_LET KW_MAT44 
+%token KW_ATTR KW_BOOL KW_CONST KW_FLOAT KW_FRAGMENT KW_INT KW_LET KW_MAT22 
+%token KW_MAT23 KW_MAT24 KW_MAT32 KW_MAT33 KW_MAT34 KW_MAT42 KW_MAT43 KW_MAT44
 %token KW_SAMPLER KW_SAMPLER2D KW_SAMPLERCUBE KW_SHADER KW_UNIT KW_VEC2 KW_VEC3 
 %token KW_VEC4 KW_VERTEX
 
@@ -33,16 +34,24 @@ typ:
 ;
 
 typ_atom:
-	  KW_BOOL        { MlslAst.TBool        }
-	| KW_FLOAT       { MlslAst.TFloat       }
-	| KW_INT         { MlslAst.TInt         }
-	| KW_MAT44       { MlslAst.TMat44       }
-	| KW_SAMPLER2D   { MlslAst.TSampler2D   }
-	| KW_SAMPLERCUBE { MlslAst.TSamplerCube }
-	| KW_UNIT        { MlslAst.TUnit        }
-	| KW_VEC2        { MlslAst.TVec2        }
-	| KW_VEC3        { MlslAst.TVec3        }
-	| KW_VEC4        { MlslAst.TVec4        }
+	  KW_BOOL        { MlslAst.TBool                            }
+	| KW_FLOAT       { MlslAst.TFloat                           }
+	| KW_INT         { MlslAst.TInt                             }
+	| KW_MAT22       { MlslAst.TMat(MlslAst.Dim2, MlslAst.Dim2) }
+	| KW_MAT23       { MlslAst.TMat(MlslAst.Dim2, MlslAst.Dim3) }
+	| KW_MAT24       { MlslAst.TMat(MlslAst.Dim2, MlslAst.Dim4) }
+	| KW_MAT32       { MlslAst.TMat(MlslAst.Dim3, MlslAst.Dim2) }
+	| KW_MAT33       { MlslAst.TMat(MlslAst.Dim3, MlslAst.Dim3) }
+	| KW_MAT34       { MlslAst.TMat(MlslAst.Dim3, MlslAst.Dim4) }
+	| KW_MAT42       { MlslAst.TMat(MlslAst.Dim4, MlslAst.Dim2) }
+	| KW_MAT43       { MlslAst.TMat(MlslAst.Dim4, MlslAst.Dim3) }
+	| KW_MAT44       { MlslAst.TMat(MlslAst.Dim4, MlslAst.Dim4) }
+	| KW_SAMPLER2D   { MlslAst.TSampler2D                       }
+	| KW_SAMPLERCUBE { MlslAst.TSamplerCube                     }
+	| KW_UNIT        { MlslAst.TUnit                            }
+	| KW_VEC2        { MlslAst.TVec MlslAst.Dim2                }
+	| KW_VEC3        { MlslAst.TVec MlslAst.Dim3                }
+	| KW_VEC4        { MlslAst.TVec MlslAst.Dim4                }
 ;
 
 typ_term:
