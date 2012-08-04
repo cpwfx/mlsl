@@ -109,6 +109,14 @@ let rec fast_check_code gamma expr =
 
 let check_semantics semantics =
 	match semantics.MlslAst.asem_name with
+	| "INPUT0"    -> ()
+	| "INPUT1"    -> ()
+	| "INPUT2"    -> ()
+	| "INPUT3"    -> ()
+	| "INPUT4"    -> ()
+	| "INPUT5"    -> ()
+	| "INPUT6"    -> ()
+	| "INPUT7"    -> ()
 	| "POSITION"  -> ()
 	| "TEXCOORD0" -> ()
 	| "TEXCOORD1" -> ()

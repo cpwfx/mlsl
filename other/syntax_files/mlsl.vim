@@ -10,7 +10,7 @@ syn match   mlslComment "//.*$" contains=mlslTodo
 syn region  mlslComment start="(\*" end="\*)" contains=mlslComment,mlslTodo
 syn keyword mlslKeyword contained attr const fragment let vertex sampler shader
 syn keyword mlslPrimType contained bool float int mat44 sampler2D samplerCube unit vec2 vec3 vec4
-syn keyword mlslSemantics contained POSITION TEXCOORD0 TEXCOORD1 TEXCOORD2 TEXCOORD3
+syn keyword mlslSemantics contained INPUT0 INPUT1 INPUT2 INPUT3 INPUT4 INPUT5 INPUT6 INPUT7 POSITION TEXCOORD0 TEXCOORD1 TEXCOORD2 TEXCOORD3
 syn match   mlslVariable "[A-Za-z'_][A-Za-z0-9'_]*" contains=mlslKeyword,mlslPrimType,mlslSemantics
 syn match   mlslVarying "[$][A-Za-z'_][A-Za-z0-9'_]*"
 syn match   mlslNumber "[0-9][0-9]*([.][0-9]*)?([eE][+-]?[0-9][0-9]*)?"

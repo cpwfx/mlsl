@@ -41,7 +41,19 @@ type sampler =
 	}
 
 type semantics =
+| SInput0
+| SInput1
+| SInput2
+| SInput3
+| SInput4
+| SInput5
+| SInput6
+| SInput7
 | SPosition
+| STexcoord0
+| STexcoord1
+| STexcoord2
+| STexcoord3
 
 type attr =
 	{ attr_semantics : semantics

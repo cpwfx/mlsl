@@ -160,7 +160,19 @@ let map_variable var =
 let map_attr_variable attr =
 	let var = map_variable attr.Midlang.attr_var in
 	begin match attr.Midlang.attr_semantics with
-	| Midlang.SPosition -> var.var_reg <- Some (0, 0)
+	| Midlang.SInput0    -> var.var_reg <- Some (0, 0)
+	| Midlang.SInput1    -> var.var_reg <- Some (1, 0)
+	| Midlang.SInput2    -> var.var_reg <- Some (2, 0)
+	| Midlang.SInput3    -> var.var_reg <- Some (3, 0)
+	| Midlang.SInput4    -> var.var_reg <- Some (4, 0)
+	| Midlang.SInput5    -> var.var_reg <- Some (5, 0)
+	| Midlang.SInput6    -> var.var_reg <- Some (6, 0)
+	| Midlang.SInput7    -> var.var_reg <- Some (7, 0)
+	| Midlang.SPosition  -> var.var_reg <- Some (0, 0)
+	| Midlang.STexcoord0 -> var.var_reg <- Some (4, 0)
+	| Midlang.STexcoord1 -> var.var_reg <- Some (5, 0)
+	| Midlang.STexcoord2 -> var.var_reg <- Some (6, 0)
+	| Midlang.STexcoord3 -> var.var_reg <- Some (7, 0)
 	end;
 	var
 

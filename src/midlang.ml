@@ -51,7 +51,19 @@ type sampler =
 	}
 
 type semantics =
+| SInput0
+| SInput1
+| SInput2
+| SInput3
+| SInput4
+| SInput5
+| SInput6
+| SInput7
 | SPosition
+| STexcoord0
+| STexcoord1
+| STexcoord2
+| STexcoord3
 
 type attr =
 	{ attr_semantics : semantics
@@ -220,8 +232,23 @@ let create_attr_list () =
 				{ attr_name      = name
 				; attr_semantics =
 					begin match semantics.MlslAst.asem_name with
-					| "POSITION" -> SPosition
-					| _ -> SPosition
+					| "INPUT0"    -> SInput0
+					| "INPUT1"    -> SInput1
+					| "INPUT2"    -> SInput2
+					| "INPUT3"    -> SInput3
+					| "INPUT4"    -> SInput4
+					| "INPUT5"    -> SInput5
+					| "INPUT6"    -> SInput6
+					| "INPUT7"    -> SInput7
+					| "POSITION"  -> SPosition
+					| "TEXCOORD0" -> STexcoord0
+					| "TEXCOORD1" -> STexcoord1
+					| "TEXCOORD2" -> STexcoord2
+					| "TEXCOORD3" -> STexcoord3
+					| sem -> 
+						Errors.error (Printf.sprintf 
+							"Internal error: unknown semantics %s." sem);
+						SPosition
 					end
 				; attr_var       = Hashtbl.find attr_map name
 				}
