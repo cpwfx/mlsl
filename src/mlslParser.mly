@@ -5,7 +5,8 @@
 %token BR_OPN BR_CLS CBR_OPN CBR_CLS
 %token ARROW COLON COMMA EQ MUL SEMI
 %token KW_ATTR KW_BOOL KW_CONST KW_FLOAT KW_FRAGMENT KW_INT KW_LET KW_MAT44 
-%token KW_SHADER KW_UNIT KW_VEC2 KW_VEC3 KW_VEC4 KW_VERTEX
+%token KW_SAMPLER KW_SAMPLER2D KW_SAMPLERCUBE KW_SHADER KW_UNIT KW_VEC2 KW_VEC3 
+%token KW_VEC4 KW_VERTEX
 
 %right ARROW
 %left  COMMA
@@ -32,14 +33,16 @@ typ:
 ;
 
 typ_atom:
-	  KW_BOOL  { MlslAst.TBool  }
-	| KW_FLOAT { MlslAst.TFloat }
-	| KW_INT   { MlslAst.TInt   }
-	| KW_MAT44 { MlslAst.TMat44 }
-	| KW_UNIT  { MlslAst.TUnit  }
-	| KW_VEC2  { MlslAst.TVec2  }
-	| KW_VEC3  { MlslAst.TVec3  }
-	| KW_VEC4  { MlslAst.TVec4  }
+	  KW_BOOL        { MlslAst.TBool        }
+	| KW_FLOAT       { MlslAst.TFloat       }
+	| KW_INT         { MlslAst.TInt         }
+	| KW_MAT44       { MlslAst.TMat44       }
+	| KW_SAMPLER2D   { MlslAst.TSampler2D   }
+	| KW_SAMPLERCUBE { MlslAst.TSamplerCube }
+	| KW_UNIT        { MlslAst.TUnit        }
+	| KW_VEC2        { MlslAst.TVec2        }
+	| KW_VEC3        { MlslAst.TVec3        }
+	| KW_VEC4        { MlslAst.TVec4        }
 ;
 
 typ_term:
@@ -55,18 +58,29 @@ expr:
 ;
 
 expr_nosemi:
+	  expr_nosemi COMMA expr_nosemi {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2) (MlslAst.EPair($1, $3))
+		}
+	| expr_nosemi MUL expr_nosemi {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2) (MlslAst.EMul($1, $3))
+		}
+	| expr_call_atom expr_call_atom_list_rev {
+			MlslAst.make_app $1 (List.rev $2)
+		}
+;
+
+expr_call_atom_list_rev:
+	  /* empty */                            { [] }
+	| expr_call_atom_list_rev expr_call_atom { $2 :: $1 }
+;
+
+expr_call_atom:
 	  NAT { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EInt $1) }
 	| ID  {	MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar $1) }
 	| VARYING { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVarying $1) }
 	| BR_OPN expr BR_CLS { $2 }
 	| CBR_OPN record_values_rev CBR_CLS {
 			MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.ERecord (List.rev $2))
-		}
-	| expr_nosemi COMMA expr_nosemi {
-			MlslAst.make_expr (Parsing.rhs_start_pos 2) (MlslAst.EPair($1, $3))
-		}
-	| expr_nosemi MUL expr_nosemi {
-			MlslAst.make_expr (Parsing.rhs_start_pos 2) (MlslAst.EMul($1, $3))
 		}
 ;
 
@@ -112,6 +126,11 @@ topdef:
 	| KW_LET KW_SHADER ID EQ expr {
 			{ MlslAst.td_pos  = Parsing.rhs_start_pos 3
 			; MlslAst.td_kind = MlslAst.TDShader($3, $5)
+			}
+		}
+	| KW_SAMPLER ID COLON typ_term {
+			{ MlslAst.td_pos = Parsing.rhs_start_pos 2
+			; MlslAst.td_kind = MlslAst.TDSamplerDecl($2, $4)
 			}
 		}
 ;

@@ -5,6 +5,8 @@ type typ =
 | TFloat
 | TInt
 | TMat44
+| TSampler2D
+| TSamplerCube
 | TUnit
 | TVec2
 | TVec3
@@ -32,6 +34,7 @@ and expr_kind =
 | ERecord  of record_field_value list
 | EPair    of expr * expr
 | EMul     of expr * expr
+| EApp     of expr * expr
 and record_field_value =
 	{ rfv_pos   : Lexing.position
 	; rfv_name  : string
@@ -49,6 +52,9 @@ type topdef_kind =
 	*  attr_semantics (* semantics *)
 	*  typ_term       (* type      *)
 | TDConstDecl 
+	of string         (* name *)
+	*  typ_term       (* type *)
+| TDSamplerDecl
 	of string         (* name *)
 	*  typ_term       (* type *)
 | TDFragmentShader
@@ -71,18 +77,31 @@ let make_expr pos kind =
 	; e_kind = kind
 	}
 
+let rec make_app func args =
+	match args with
+	| [] -> func
+	| arg :: args -> make_app (make_expr arg.e_pos (EApp(func, arg))) args
+
 let is_reg_type tp =
 	match tp with
 	| TBool | TFloat | TInt | TUnit | TVec2 | TVec3 | TVec4 -> true
-	| TMat44 | TArrow _ | TPair _ | TRecord _ | TVertex _ | TFragment _ 
-	| TVertexTop -> false
+	| TSampler2D | TSamplerCube | TMat44 | TArrow _ | TPair _ | TRecord _ 
+	| TVertex _ | TFragment _ | TVertexTop -> false
 
 let rec is_data_type tp =
 	match tp with
 	| TBool | TFloat | TInt | TMat44 | TUnit | TVec2 | TVec3 | TVec4 -> true
-	| TArrow _ | TVertex _ | TFragment _ | TVertexTop -> false
+	| TSampler2D | TSamplerCube | TArrow _ | TVertex _ | TFragment _ 
+	| TVertexTop -> false
 	| TRecord r -> List.for_all (fun (_, t) -> is_data_type t) r
 	| TPair(t1, t2) -> is_data_type t1 && is_data_type t2
+
+let rec is_sampler_type tp =
+	match tp with
+	| TSampler2D | TSamplerCube -> true
+	| TBool | TFloat | TInt | TMat44 | TUnit | TVec2 | TVec3 | TVec4
+	| TArrow _ | TPair _ | TRecord _ | TVertex _ | TFragment _ 
+	| TVertexTop -> false
 
 let rec string_of_typ p tp =
 	match tp with
@@ -90,6 +109,8 @@ let rec string_of_typ p tp =
 	| TFloat         -> "float"
 	| TInt           -> "int"
 	| TMat44         -> "mat44"
+	| TSampler2D     -> "sampler2D"
+	| TSamplerCube   -> "samplerCube"
 	| TUnit          -> "unit"
 	| TVec2          -> "vec2"
 	| TVec3          -> "vec3"

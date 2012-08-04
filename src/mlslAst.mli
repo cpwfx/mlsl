@@ -5,6 +5,8 @@ type typ =
 | TFloat
 | TInt
 | TMat44
+| TSampler2D
+| TSamplerCube
 | TUnit
 | TVec2
 | TVec3
@@ -32,6 +34,7 @@ and expr_kind =
 | ERecord  of record_field_value list
 | EPair    of expr * expr
 | EMul     of expr * expr
+| EApp     of expr * expr
 and record_field_value =
 	{ rfv_pos   : Lexing.position
 	; rfv_name  : string
@@ -51,6 +54,9 @@ type topdef_kind =
 | TDConstDecl 
 	of string         (* name *)
 	*  typ_term       (* type *)
+| TDSamplerDecl
+	of string         (* name *)
+	*  typ_term       (* type *)
 | TDFragmentShader
 	of string         (* name *)
 	*  expr           (* body *)
@@ -67,9 +73,11 @@ type topdef =
 	}
 
 val make_expr : Lexing.position -> expr_kind -> expr
+val make_app  : expr -> expr list -> expr
 
-val is_reg_type  : typ -> bool
-val is_data_type : typ -> bool
+val is_reg_type     : typ -> bool
+val is_data_type    : typ -> bool
+val is_sampler_type : typ -> bool
 
 val string_of_typ : int -> typ -> string
 

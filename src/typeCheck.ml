@@ -71,6 +71,9 @@ let rec infer_type gamma worlds expr =
 	| MlslAst.EMul(v1, v2) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EMul.";
 		[]
+	| MlslAst.EApp(e1, e2) ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EApp.";
+		[]
 	end
 
 (* ========================================================================= *)
@@ -98,12 +101,19 @@ let rec fast_check_code gamma expr =
 	| MlslAst.EMul(v1, v2) ->
 		fast_check_code gamma v1;
 		fast_check_code gamma v2
+	| MlslAst.EApp(e1, e2) ->
+		fast_check_code gamma e1;
+		fast_check_code gamma e2
 
 (* ========================================================================= *)
 
 let check_semantics semantics =
 	match semantics.MlslAst.asem_name with
-	| "POSITION" -> ()
+	| "POSITION"  -> ()
+	| "TEXCOORD0" -> ()
+	| "TEXCOORD1" -> ()
+	| "TEXCOORD2" -> ()
+	| "TEXCOORD3" -> ()
 	| sn ->
 		Errors.error_p semantics.MlslAst.asem_pos (
 			Printf.sprintf "Unknown semantics: %s." sn)
@@ -143,6 +153,13 @@ let check_const_decl td name typ =
 	begin if not (MlslAst.is_data_type typ.MlslAst.tt_typ) then
 		Errors.error_p typ.MlslAst.tt_pos 
 			"Constants with not data type are forbidden."
+	end;
+	TopDef.add name [typ.MlslAst.tt_typ] td
+
+let check_sampler_decl td name typ =
+	begin if not (MlslAst.is_sampler_type typ.MlslAst.tt_typ) then
+		Errors.error_p typ.MlslAst.tt_pos
+			"Sampler should have a sampler type."
 	end;
 	TopDef.add name [typ.MlslAst.tt_typ] td
 
@@ -186,6 +203,8 @@ let check_topdef td =
 		check_attr_decl td name semantics typ
 	| MlslAst.TDConstDecl(name, typ) ->
 		check_const_decl td name typ
+	| MlslAst.TDSamplerDecl(name, typ) ->
+		check_sampler_decl td name typ
 	| MlslAst.TDFragmentShader(name, body) ->
 		check_fragment_shader td name body
 	| MlslAst.TDVertexShader(name, body) ->
@@ -199,6 +218,8 @@ let fast_check_topdef td =
 		check_attr_decl td name semantics typ
 	| MlslAst.TDConstDecl(name, typ) ->
 		check_const_decl td name typ
+	| MlslAst.TDSamplerDecl(name, typ) ->
+		check_sampler_decl td name typ
 	| MlslAst.TDFragmentShader(name, body) ->
 		fast_check_fragment_shader td name body
 	| MlslAst.TDVertexShader(name, body) ->

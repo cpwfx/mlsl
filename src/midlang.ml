@@ -2,8 +2,9 @@
 
 module StrMap = Map.Make(String)
 
-let instr_fresh = Misc.Fresh.create ()
-let var_fresh   = Misc.Fresh.create ()
+let instr_fresh   = Misc.Fresh.create ()
+let var_fresh     = Misc.Fresh.create ()
+let sampler_fresh = Misc.Fresh.create ()
 
 type dim =
 | Dim2
@@ -39,6 +40,16 @@ module Variable = struct
 	let compare x y = compare x.var_id y.var_id
 end
 
+type sampler_dim =
+| SDim2D
+| SDimCube
+
+type sampler =
+	{ sampler_id   : int
+	; sampler_name : string
+	; sampler_dim  : sampler_dim
+	}
+
 type semantics =
 | SPosition
 
@@ -58,6 +69,7 @@ type instr_kind =
 | IMulFF   of variable * variable * variable
 | IMulMV   of variable * variable * variable * dim * dim
 | IMulVF   of variable * variable * variable * dim
+| ITex     of variable * variable * sampler
 | IRet     of variable
 type instr =
 	{ ins_id   : int
@@ -75,6 +87,7 @@ type shader =
 	; sh_v_const  : param list
 	; sh_f_const  : param list
 	; sh_varying  : param list
+	; sh_samplers : sampler list
 	; sh_vertex   : instr list
 	; sh_fragment : instr list
 	}
@@ -98,7 +111,8 @@ let create_var_ast sort ast_typ =
 		| MlslAst.TVec2  -> TVec Dim2
 		| MlslAst.TVec3  -> TVec Dim3
 		| MlslAst.TVec4  -> TVec Dim4
-		| MlslAst.TBool | MlslAst.TUnit | MlslAst.TArrow _ | MlslAst.TPair _
+		| MlslAst.TBool | MlslAst.TSampler2D | MlslAst.TSamplerCube 
+		| MlslAst.TUnit | MlslAst.TArrow _ | MlslAst.TPair _
 		| MlslAst.TRecord _ | MlslAst.TVertex _ | MlslAst.TFragment _
 		| MlslAst.TVertexTop -> raise Misc.InternalError
 		end
@@ -109,6 +123,17 @@ let create_variable sort typ =
 	{ var_id   = Misc.Fresh.next var_fresh
 	; var_typ  = typ
 	; var_sort = sort
+	}
+
+let create_sampler_ast name typ =
+	{ sampler_id   = Misc.Fresh.next sampler_fresh
+	; sampler_name = name
+	; sampler_dim  =
+		begin match typ with
+		| MlslAst.TSampler2D   -> SDim2D
+		| MlslAst.TSamplerCube -> SDimCube
+		| _ -> raise Misc.InternalError
+		end
 	}
 
 (* ========================================================================= *)
@@ -186,6 +211,7 @@ let attr_map    = Hashtbl.create 32
 let v_const_map = Hashtbl.create 32
 let f_const_map = Hashtbl.create 32
 let varying_map = Hashtbl.create 32
+let sampler_map = Hashtbl.create 32
 
 let create_attr_list () =
 	Misc.ListExt.map_filter (fun (name, semantics, _) ->
@@ -225,6 +251,13 @@ let create_varying_list () =
 		; param_var  = var
 		} :: l) varying_map []
 
+let create_sampler_list () =
+	Misc.ListExt.map_filter (fun (name, _) ->
+		try
+			Some (Hashtbl.find sampler_map name)
+		with
+		| Not_found -> None) (TopDef.sampler_list ())
+
 (* ========================================================================= *)
 
 type reg_value =
@@ -232,57 +265,75 @@ type reg_value =
 	; rv_kind : reg_value_kind
 	}
 and reg_value_kind =
-| RVReg    of variable
-| RVRecord of reg_value StrMap.t
+| RVReg     of variable
+| RVRecord  of reg_value StrMap.t
+| RVSampler of sampler
 
-let rec unfold_code vertex code gamma expr =
-	match expr.MlslAst.e_kind with
-	| MlslAst.EVar x ->
-		if StrMap.mem x gamma then begin 
-			Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EVar gamma(x).";
-			None
-		end else begin match TopDef.check_name x with
-		| None ->
-			Errors.error_p expr.MlslAst.e_pos "Internal error!!!"; None
-		| Some(_, td) ->
-			begin match td.MlslAst.td_kind with
-			| MlslAst.TDAttrDecl(name, _, typ) ->
-				if vertex then
-					Some (
-						{ rv_pos  = td.MlslAst.td_pos
-						; rv_kind = RVReg (
-							try
-								Hashtbl.find attr_map name
-							with
-							| Not_found ->
-								let v = create_var_ast VSAttribute typ.MlslAst.tt_typ in
-								Hashtbl.add attr_map name v;
-								v
-							)
-						}, code)
-				else begin
-					Errors.error_p expr.MlslAst.e_pos "Attributes are not available for fragment shaders.";
-					None
-				end
-			| MlslAst.TDConstDecl(name, typ) ->
-				let const_map = if vertex then v_const_map else f_const_map in
+let unfold_code_var vertex code gamma expr x =
+	if StrMap.mem x gamma then begin 
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code_var EVar gamma(x).";
+		None
+	end else begin match TopDef.check_name x with
+	| None ->
+		Errors.error_p expr.MlslAst.e_pos "Internal error!!!"; None
+	| Some(_, td) ->
+		begin match td.MlslAst.td_kind with
+		| MlslAst.TDAttrDecl(name, _, typ) ->
+			if vertex then
 				Some (
 					{ rv_pos  = td.MlslAst.td_pos
 					; rv_kind = RVReg (
 						try
-							Hashtbl.find const_map name
+							Hashtbl.find attr_map name
 						with
 						| Not_found ->
-							let v = create_var_ast VSConstant typ.MlslAst.tt_typ in
-							Hashtbl.add const_map name v;
+							let v = create_var_ast VSAttribute typ.MlslAst.tt_typ in
+							Hashtbl.add attr_map name v;
 							v
 						)
 					}, code)
-			| _ ->
-				Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EVar global.";
+			else begin
+				Errors.error_p expr.MlslAst.e_pos "Attributes are not available for fragment shaders.";
 				None
 			end
+		| MlslAst.TDConstDecl(name, typ) ->
+			let const_map = if vertex then v_const_map else f_const_map in
+			Some (
+				{ rv_pos  = td.MlslAst.td_pos
+				; rv_kind = RVReg (
+					try
+						Hashtbl.find const_map name
+					with
+					| Not_found ->
+						let v = create_var_ast VSConstant typ.MlslAst.tt_typ in
+						Hashtbl.add const_map name v;
+						v
+					)
+				}, code)
+		| MlslAst.TDSamplerDecl(name, typ) ->
+			Some (
+				{ rv_pos = td.MlslAst.td_pos
+				; rv_kind = RVSampler (
+					try
+						Hashtbl.find sampler_map name
+					with
+					| Not_found ->
+						let v = create_sampler_ast name typ.MlslAst.tt_typ in
+						Hashtbl.add sampler_map name v;
+						v
+					)
+				}, code)
+		| _ ->
+			Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code_var EVar global.";
+			None
 		end
+	end
+
+(* TODO: Change Opt monad to try ... with *)
+let rec unfold_code vertex code gamma expr =
+	match expr.MlslAst.e_kind with
+	| MlslAst.EVar x ->
+		unfold_code_var vertex code gamma expr x
 	| MlslAst.EVarying x ->
 		if vertex then begin
 			Errors.error_p expr.MlslAst.e_pos "Varying variables are not allowed in vertex shaders.";
@@ -338,11 +389,58 @@ let rec unfold_code vertex code gamma expr =
 					(Printf.sprintf "First operand defined at %s is a record, can not be multiplied."
 						(Errors.string_of_pos rv1.rv_pos));
 				None
+			| RVSampler _, _ ->
+				Errors.error_p expr.MlslAst.e_pos 
+					(Printf.sprintf "First operand defined at %s is a sampler, can not be multiplied."
+						(Errors.string_of_pos rv1.rv_pos));
+				None
 			| _, RVRecord _ ->
 				Errors.error_p expr.MlslAst.e_pos 
 					(Printf.sprintf "Second operand defined at %s is a record, can not be multiplied."
 						(Errors.string_of_pos rv2.rv_pos));
 				None
+			| _, RVSampler _ ->
+				Errors.error_p expr.MlslAst.e_pos 
+					(Printf.sprintf "Second operand defined at %s is a sampler, can not be multiplied."
+						(Errors.string_of_pos rv2.rv_pos));
+				None
+		))
+	| MlslAst.EApp(e1, e2) ->
+		Misc.Opt.bind (unfold_code vertex code gamma e1) (fun (func, code) ->
+		Misc.Opt.bind (unfold_code vertex code gamma e2) (fun (rvarg, code) ->
+			match func.rv_kind with
+			| RVSampler sampler ->
+				begin match rvarg.rv_kind with
+				| RVReg coordreg ->
+					begin match coordreg.var_typ with
+					| TVec Dim2 ->
+						let rreg = create_variable VSTemporary (TVec Dim4) in
+						Misc.ImpList.add code 
+							(create_instr (ITex(rreg, coordreg, sampler)));
+						Some ( { rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }, code )
+					| tp ->
+						Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+							"Texture coordinates defined at %s have type %s, but expected vec2."
+								(Errors.string_of_pos rvarg.rv_pos)
+								(string_of_typ tp));
+						None
+					end
+				| RVRecord _ ->
+					Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+						"Value defined at %s is a record, can not be used as texture coordinates."
+							(Errors.string_of_pos rvarg.rv_pos));
+						None
+				| RVSampler _ ->
+					Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+						"Value defined at %s is a sampler, can not be used as texture coordinates."
+							(Errors.string_of_pos rvarg.rv_pos));
+						None
+				end
+			| _ -> 
+				Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+					"Value defined at %s is not a function/sampler, can not be applied."
+						(Errors.string_of_pos func.rv_pos));
+					None
 		))
 
 let unfold_vertex gamma expr =
@@ -435,6 +533,7 @@ let unfold_shader name expr =
 						; sh_v_const  = create_v_const_list ()
 						; sh_f_const  = create_f_const_list ()
 						; sh_varying  = create_varying_list ()
+						; sh_samplers = create_sampler_list ()
 						; sh_vertex   = Misc.ImpList.to_list vertex
 						; sh_fragment = Misc.ImpList.to_list fragment
 						} ))

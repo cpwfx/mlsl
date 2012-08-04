@@ -6,11 +6,11 @@ if exists("b:current_syntax")
 endif
 
 syn keyword mlslTodo contained TODO FIXME XXX NOTE
-syn match   mlslComment "//.*$" contains=skimlTodo
+syn match   mlslComment "//.*$" contains=mlslTodo
 syn region  mlslComment start="(\*" end="\*)" contains=mlslComment,mlslTodo
-syn keyword mlslKeyword contained attr const fragment let vertex shader
-syn keyword mlslPrimType contained bool float int mat44 unit vec2 vec3 vec4
-syn keyword mlslSemantics contained POSITION
+syn keyword mlslKeyword contained attr const fragment let vertex sampler shader
+syn keyword mlslPrimType contained bool float int mat44 sampler2D samplerCube unit vec2 vec3 vec4
+syn keyword mlslSemantics contained POSITION TEXCOORD0 TEXCOORD1 TEXCOORD2 TEXCOORD3
 syn match   mlslVariable "[A-Za-z'_][A-Za-z0-9'_]*" contains=mlslKeyword,mlslPrimType,mlslSemantics
 syn match   mlslVarying "[$][A-Za-z'_][A-Za-z0-9'_]*"
 syn match   mlslNumber "[0-9][0-9]*([.][0-9]*)?([eE][+-]?[0-9][0-9]*)?"

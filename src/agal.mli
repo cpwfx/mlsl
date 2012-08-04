@@ -60,20 +60,44 @@ type source =
 	; src_offset  : source_offset option
 	}
 
+type sampler_filter =
+| SFltrNearest
+| SFltrLinear
+
+type sampler_mipmap =
+| SMipDisable
+| SMipNearest
+| SMipLinear
+
+type sampler_wrapping =
+| SWrapClamp
+| SWrapRepeat
+
+type sampler =
+	{         sam_name     : string
+	; mutable sam_index    : int option
+	;         sam_filter   : sampler_filter
+	;         sam_mipmap   : sampler_mipmap
+	;         sam_wrapping : sampler_wrapping
+	;         sam_dim      : Midlang.sampler_dim
+	}
+
 type instr_kind =
 | IMov of dest * source
 | IMul of dest * source * source
 | IM44 of dest * source * source
+| ITex of dest * source * sampler
 type instr =
 	{ ins_id   : int
 	; ins_kind : instr_kind
 	}
 
 type shader_globals =
-	{ shg_attr    : attr list
-	; shg_v_const : const list
-	; shg_f_const : const list
-	; shg_varying : variable list
+	{ shg_attr     : attr list
+	; shg_v_const  : const list
+	; shg_f_const  : const list
+	; shg_varying  : variable list
+	; shg_samplers : sampler list
 	}
 
 type shader =

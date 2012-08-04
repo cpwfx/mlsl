@@ -30,6 +30,16 @@ module Variable : sig
 	val compare : t -> t -> int
 end
 
+type sampler_dim =
+| SDim2D
+| SDimCube
+
+type sampler =
+	{ sampler_id   : int
+	; sampler_name : string
+	; sampler_dim  : sampler_dim
+	}
+
 type semantics =
 | SPosition
 
@@ -49,6 +59,7 @@ type instr_kind =
 | IMulFF   of variable * variable * variable
 | IMulMV   of variable * variable * variable * dim * dim
 | IMulVF   of variable * variable * variable * dim
+| ITex     of variable * variable * sampler
 | IRet     of variable
 type instr =
 	{ ins_id   : int
@@ -63,6 +74,7 @@ type shader =
 	; sh_v_const  : param list
 	; sh_f_const  : param list
 	; sh_varying  : param list
+	; sh_samplers : sampler list
 	; sh_vertex   : instr list
 	; sh_fragment : instr list
 	}

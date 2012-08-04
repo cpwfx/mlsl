@@ -7,6 +7,8 @@ type typ =
 | TFloat
 | TInt
 | TMat44
+| TSampler2D
+| TSamplerCube
 | TUnit
 | TVec2
 | TVec3

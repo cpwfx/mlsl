@@ -3,20 +3,23 @@
 
 let kw_map = Hashtbl.create 32
 let _ =
-	Hashtbl.add kw_map "attr"     MlslParser.KW_ATTR;
-	Hashtbl.add kw_map "bool"     MlslParser.KW_BOOL;
-	Hashtbl.add kw_map "const"    MlslParser.KW_CONST;
-	Hashtbl.add kw_map "float"    MlslParser.KW_FLOAT;
-	Hashtbl.add kw_map "fragment" MlslParser.KW_FRAGMENT;
-	Hashtbl.add kw_map "int"      MlslParser.KW_INT;
-	Hashtbl.add kw_map "let"      MlslParser.KW_LET;
-	Hashtbl.add kw_map "mat44"    MlslParser.KW_MAT44;
-	Hashtbl.add kw_map "shader"   MlslParser.KW_SHADER;
-	Hashtbl.add kw_map "unit"     MlslParser.KW_UNIT;
-	Hashtbl.add kw_map "vec2"     MlslParser.KW_VEC2;
-	Hashtbl.add kw_map "vec3"     MlslParser.KW_VEC3;
-	Hashtbl.add kw_map "vec4"     MlslParser.KW_VEC4;
-	Hashtbl.add kw_map "vertex"   MlslParser.KW_VERTEX;
+	Hashtbl.add kw_map "attr"        MlslParser.KW_ATTR;
+	Hashtbl.add kw_map "bool"        MlslParser.KW_BOOL;
+	Hashtbl.add kw_map "const"       MlslParser.KW_CONST;
+	Hashtbl.add kw_map "float"       MlslParser.KW_FLOAT;
+	Hashtbl.add kw_map "fragment"    MlslParser.KW_FRAGMENT;
+	Hashtbl.add kw_map "int"         MlslParser.KW_INT;
+	Hashtbl.add kw_map "let"         MlslParser.KW_LET;
+	Hashtbl.add kw_map "mat44"       MlslParser.KW_MAT44;
+	Hashtbl.add kw_map "sampler"     MlslParser.KW_SAMPLER;
+	Hashtbl.add kw_map "sampler2D"   MlslParser.KW_SAMPLER2D;
+	Hashtbl.add kw_map "samplerCube" MlslParser.KW_SAMPLERCUBE;
+	Hashtbl.add kw_map "shader"      MlslParser.KW_SHADER;
+	Hashtbl.add kw_map "unit"        MlslParser.KW_UNIT;
+	Hashtbl.add kw_map "vec2"        MlslParser.KW_VEC2;
+	Hashtbl.add kw_map "vec3"        MlslParser.KW_VEC3;
+	Hashtbl.add kw_map "vec4"        MlslParser.KW_VEC4;
+	Hashtbl.add kw_map "vertex"      MlslParser.KW_VERTEX;
 	()
 
 let op_map = Hashtbl.create 32

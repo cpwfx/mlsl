@@ -13,6 +13,8 @@ type typ =
 | TFloat
 | TInt
 | TMat44
+| TSampler2D
+| TSamplerCube
 | TUnit
 | TVec2
 | TVec3
@@ -42,14 +44,16 @@ let select_type world tpl =
 
 let rec to_ast world tp =
 	match tp with
-	| TBool  -> MlslAst.TBool
-	| TFloat -> MlslAst.TFloat
-	| TInt   -> MlslAst.TInt
-	| TMat44 -> MlslAst.TMat44
-	| TUnit  -> MlslAst.TUnit
-	| TVec2  -> MlslAst.TVec2
-	| TVec3  -> MlslAst.TVec3
-	| TVec4  -> MlslAst.TVec4
+	| TBool        -> MlslAst.TBool
+	| TFloat       -> MlslAst.TFloat
+	| TInt         -> MlslAst.TInt
+	| TMat44       -> MlslAst.TMat44
+	| TSampler2D   -> MlslAst.TSampler2D
+	| TSamplerCube -> MlslAst.TSamplerCube
+	| TUnit        -> MlslAst.TUnit
+	| TVec2        -> MlslAst.TVec2
+	| TVec3        -> MlslAst.TVec3
+	| TVec4        -> MlslAst.TVec4
 	| TArrow(t1, t2) -> MlslAst.TArrow(to_ast world t1, to_ast world t2)
 	| TPair(t1, t2) -> MlslAst.TPair(to_ast world t1, to_ast world t2)
 	| TRecord rd -> MlslAst.TRecord(List.map (fun (n, t) -> (n, to_ast world t)) rd)
@@ -59,14 +63,16 @@ let rec to_ast world tp =
 
 let rec of_ast tp =
 	match tp with
-	| MlslAst.TBool  -> TBool
-	| MlslAst.TFloat -> TFloat
-	| MlslAst.TInt   -> TInt
-	| MlslAst.TMat44 -> TMat44
-	| MlslAst.TUnit  -> TUnit
-	| MlslAst.TVec2  -> TVec2
-	| MlslAst.TVec3  -> TVec3
-	| MlslAst.TVec4  -> TVec4
+	| MlslAst.TBool        -> TBool
+	| MlslAst.TFloat       -> TFloat
+	| MlslAst.TInt         -> TInt
+	| MlslAst.TMat44       -> TMat44
+	| MlslAst.TSampler2D   -> TSampler2D
+	| MlslAst.TSamplerCube -> TSamplerCube
+	| MlslAst.TUnit        -> TUnit
+	| MlslAst.TVec2        -> TVec2
+	| MlslAst.TVec3        -> TVec3
+	| MlslAst.TVec4        -> TVec4
 	| MlslAst.TArrow(t1, t2) -> TArrow(of_ast t1, of_ast t2)
 	| MlslAst.TPair(t1, t2) -> TPair(of_ast t1, of_ast t2)
 	| MlslAst.TRecord rd -> TRecord(List.map (fun (n, t) -> (n, of_ast t)) rd)
