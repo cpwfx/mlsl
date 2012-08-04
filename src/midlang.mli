@@ -71,6 +71,7 @@ type instr_kind =
 | IMulFF   of variable * variable * variable
 | IMulMV   of variable * variable * variable * dim * dim
 | IMulVF   of variable * variable * variable * dim
+| ISwizzle of variable * variable * MlslAst.Swizzle.t
 | ITex     of variable * variable * sampler
 | IRet     of variable
 type instr =

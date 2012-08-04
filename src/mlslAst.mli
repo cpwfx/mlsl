@@ -1,5 +1,32 @@
 (* File: mlslAst.mli *)
 
+module Swizzle : sig
+	exception Not_swizzle
+
+	type component = 
+	| X
+	| Y
+	| Z
+	| W
+
+	type t =
+	| S1 of component
+	| S2 of component * component
+	| S3 of component * component * component
+	| S4 of component * component * component * component
+
+	val component_of_char : char -> component
+	val of_string : string -> t
+	val try_of_string : string -> t option
+	val component_to_string : component -> string
+	val to_string : t -> string
+
+	val size : t -> int
+
+	val component_id : component -> int
+	val max_component_id : t -> int
+end
+
 type typ =
 | TBool
 | TFloat
@@ -31,7 +58,9 @@ and expr_kind =
 | EVar     of string
 | EVarying of string
 | EInt     of int
+| ESwizzle of expr * Swizzle.t
 | ERecord  of record_field_value list
+| ESelect  of expr * string
 | EPair    of expr * expr
 | EMul     of expr * expr
 | EApp     of expr * expr
@@ -72,8 +101,9 @@ type topdef =
 	; td_kind : topdef_kind
 	}
 
-val make_expr : Lexing.position -> expr_kind -> expr
-val make_app  : expr -> expr list -> expr
+val make_expr   : Lexing.position -> expr_kind -> expr
+val make_app    : expr -> expr list -> expr
+val make_select : Lexing.position -> expr -> string -> expr
 
 val is_reg_type     : typ -> bool
 val is_data_type    : typ -> bool

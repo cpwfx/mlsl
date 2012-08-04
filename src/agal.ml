@@ -230,6 +230,19 @@ let dst_mask_vec4  = { dmask_x = true; dmask_y = true;  dmask_z = true;  dmask_w
 
 let swizzle_nop () = [| 0; 1; 2; 3 |]
 
+let make_swizzle swizzle =
+	match swizzle with
+	| MlslAst.Swizzle.S1 c1 ->
+		[| MlslAst.Swizzle.component_id c1; 0; 0; 0 |]
+	| MlslAst.Swizzle.S2(c1, c2) ->
+		[| MlslAst.Swizzle.component_id c1; MlslAst.Swizzle.component_id c2; 0; 0 |]
+	| MlslAst.Swizzle.S3(c1, c2, c3) ->
+		[| MlslAst.Swizzle.component_id c1; MlslAst.Swizzle.component_id c2
+		;  MlslAst.Swizzle.component_id c3; 0 |]
+	| MlslAst.Swizzle.S4(c1, c2, c3, c4) ->
+		[| MlslAst.Swizzle.component_id c1; MlslAst.Swizzle.component_id c2
+		;  MlslAst.Swizzle.component_id c3; MlslAst.Swizzle.component_id c4 |]
+
 let make_dest_float reg =
 	{ dst_var  = map_variable reg
 	; dst_row  = 0
@@ -272,6 +285,13 @@ let make_source_float reg =
 	; src_offset  = None
 	}
 
+let make_swizzled_source reg swizzle =
+	{ src_var     = map_variable reg
+	; src_row     = 0
+	; src_swizzle = make_swizzle swizzle
+	; src_offset  = None
+	}
+
 let create_instr kind =
 	{ ins_id   = Misc.Fresh.next fresh_ins
 	; ins_kind = kind
@@ -304,6 +324,18 @@ let build_ins globals const ins =
 		Some (create_instr 
 			(IMul(make_dest dim res, make_source vec, make_source_float flo)), 
 			const)
+	| Midlang.ISwizzle(dst, src, swizzle) ->
+		begin match dst.Midlang.var_typ with
+		| Midlang.TFloat | Midlang.TInt ->
+			Some (
+				create_instr (IMov(make_dest_float dst, make_swizzled_source src swizzle)), 
+				const)
+		| Midlang.TVec dim ->
+			Some (
+				create_instr (IMov(make_dest dim dst, make_swizzled_source src swizzle)), 
+				const)
+		| _ -> raise Misc.InternalError
+		end
 	| Midlang.ITex(rv, vc, sam) ->
 		Some (create_instr 
 			(ITex(make_dest Midlang.Dim4 rv, make_source vc, map_sampler sam)),

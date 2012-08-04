@@ -1,0 +1,21 @@
+// Const declarations
+const projMatrix  : mat44
+
+// Attributes declarations
+attr POSITION  pos   : vec4
+attr TEXCOORD0 coord : vec2
+
+// Samplers declarations
+sampler tex : sampler2D
+
+// vertex shader
+let vertex vs =
+	{ position = projMatrix * pos
+	; coord    = coord
+	}
+
+// fragment shader
+let fragment fs =
+	(tex $coord.yx).wzxw
+
+let shader swizzle_shader= (vs, fs)

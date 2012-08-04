@@ -52,6 +52,9 @@ let rec infer_type gamma worlds expr =
 	| MlslAst.EInt n ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EInt.";
 		[]
+	| MlslAst.ESwizzle(v1, swizzle) ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type ESwizzle.";
+		[]
 	| MlslAst.ERecord rd ->
 		check_field_uniqueness rd;
 		let (rev_raw_record, worlds') = 
@@ -65,6 +68,9 @@ let rec infer_type gamma worlds expr =
 							(n, TypeWorlds.select_type wrld ltp)
 						) rev_raw_record)
 			)) worlds'
+	| MlslAst.ESelect(v1, field) ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type ESelect.";
+		[]
 	| MlslAst.EPair(v1, v2) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EPair.";
 		[]
@@ -92,9 +98,13 @@ let rec fast_check_code gamma expr =
 	| MlslAst.EVarying x -> ()
 	| MlslAst.EInt n ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: fast_check_code EInt."
+	| MlslAst.ESwizzle(v, _) ->
+		fast_check_code gamma v
 	| MlslAst.ERecord rd ->
 		check_field_uniqueness rd;
 		List.iter (fun field -> fast_check_code gamma field.MlslAst.rfv_value) rd
+	| MlslAst.ESelect(v, _) ->
+		fast_check_code gamma v
 	| MlslAst.EPair(v1, v2) ->
 		fast_check_code gamma v1;
 		fast_check_code gamma v2

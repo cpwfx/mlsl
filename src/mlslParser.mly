@@ -3,7 +3,7 @@
 %token <string> FLOAT
 %token EOF
 %token BR_OPN BR_CLS CBR_OPN CBR_CLS
-%token ARROW COLON COMMA EQ MUL SEMI
+%token ARROW COLON COMMA DOT EQ MUL SEMI
 %token KW_ATTR KW_BOOL KW_CONST KW_FLOAT KW_FRAGMENT KW_INT KW_LET KW_MAT44 
 %token KW_SAMPLER KW_SAMPLER2D KW_SAMPLERCUBE KW_SHADER KW_UNIT KW_VEC2 KW_VEC3 
 %token KW_VEC4 KW_VERTEX
@@ -81,6 +81,9 @@ expr_call_atom:
 	| BR_OPN expr BR_CLS { $2 }
 	| CBR_OPN record_values_rev CBR_CLS {
 			MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.ERecord (List.rev $2))
+		}
+	| expr_call_atom DOT ID {
+			MlslAst.make_select (Parsing.rhs_start_pos 2) $1 $3
 		}
 ;
 

@@ -27,6 +27,7 @@ let _ =
 	Hashtbl.add op_map "->" MlslParser.ARROW;
 	Hashtbl.add op_map ":"  MlslParser.COLON;
 	Hashtbl.add op_map ","  MlslParser.COMMA;
+	Hashtbl.add op_map "."  MlslParser.DOT;
 	Hashtbl.add op_map "="  MlslParser.EQ;
 	Hashtbl.add op_map "*"  MlslParser.MUL;
 	Hashtbl.add op_map ";"  MlslParser.SEMI;

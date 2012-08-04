@@ -81,6 +81,7 @@ type instr_kind =
 | IMulFF   of variable * variable * variable
 | IMulMV   of variable * variable * variable * dim * dim
 | IMulVF   of variable * variable * variable * dim
+| ISwizzle of variable * variable * MlslAst.Swizzle.t
 | ITex     of variable * variable * sampler
 | IRet     of variable
 type instr =
@@ -110,6 +111,14 @@ let string_of_typ tp =
 	| TInt         -> "int"
 	| TMat(d1, d2) -> Printf.sprintf "mat%d%d" (int_of_dim d1) (int_of_dim d2)
 	| TVec d       -> Printf.sprintf "vec%d" (int_of_dim d)
+
+let vectyp_of_int n =
+	match n with
+	| 1 -> TFloat
+	| 2 -> TVec Dim2
+	| 3 -> TVec Dim3
+	| 4 -> TVec Dim4
+	| _ -> raise Misc.InternalError
 
 (* ========================================================================= *)
 
@@ -296,6 +305,12 @@ and reg_value_kind =
 | RVRecord  of reg_value StrMap.t
 | RVSampler of sampler
 
+let string_of_rvkind kind =
+	match kind with
+	| RVReg _ -> "data type value"
+	| RVRecord _ -> "record"
+	| RVSampler _ -> "sampler"
+
 let unfold_code_var vertex code gamma expr x =
 	if StrMap.mem x gamma then begin 
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code_var EVar gamma(x).";
@@ -380,6 +395,62 @@ let rec unfold_code vertex code gamma expr =
 	| MlslAst.EInt n ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EInt.";
 		None
+	| MlslAst.ESwizzle(e, swizzle) ->
+		Misc.Opt.bind (unfold_code vertex code gamma e) (fun (rv, code) ->
+			match rv.rv_kind with
+			| RVReg rvreg ->
+				begin match rvreg.var_typ with
+				| TFloat ->
+					if MlslAst.Swizzle.max_component_id swizzle = 0 then
+						let rreg = create_variable VSTemporary 
+							(vectyp_of_int (MlslAst.Swizzle.size swizzle)) in
+						Misc.ImpList.add code 
+							(create_instr (ISwizzle(rreg, rvreg, swizzle)));
+						Some (
+							{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg },
+							code )
+					else begin
+						Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+							"Value defined at %s has type float, can not be swizzled using pattern %s."
+								(Errors.string_of_pos rv.rv_pos)
+								(MlslAst.Swizzle.to_string swizzle)
+							);
+						None
+					end
+				| TVec d ->
+					if MlslAst.Swizzle.max_component_id swizzle < int_of_dim d then
+						let rreg = create_variable VSTemporary 
+							(vectyp_of_int (MlslAst.Swizzle.size swizzle)) in
+						Misc.ImpList.add code 
+							(create_instr (ISwizzle(rreg, rvreg, swizzle)));
+						Some (
+							{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg },
+							code )
+					else begin
+						Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+							"Value defined at %s has type %s, can not be swizzled using pattern %s."
+								(Errors.string_of_pos rv.rv_pos)
+								(string_of_typ rvreg.var_typ)
+								(MlslAst.Swizzle.to_string swizzle)
+							);
+						None
+					end
+				| tp ->
+					Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+						"Value defined at %s has type %s, can not be swizzled."
+							(Errors.string_of_pos rv.rv_pos)
+							(string_of_typ tp)
+						);
+					None
+				end
+			| kind ->
+				Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+					"Value defined at %s is a %s, can not be swizzled."
+						(Errors.string_of_pos rv.rv_pos)
+						(string_of_rvkind kind)
+					);
+				None
+		)
 	| MlslAst.ERecord rd ->
 		Misc.Opt.map_f (Misc.ListExt.opt_fold_left (fun field (regMap, code) ->
 			Misc.Opt.map_f (unfold_code vertex code gamma field.MlslAst.rfv_value) 
@@ -387,6 +458,9 @@ let rec unfold_code vertex code gamma expr =
 				(StrMap.add field.MlslAst.rfv_name rv regMap, code')
 			)) (Some(StrMap.empty, code)) rd) (fun (rd', code') -> 
 				( { rv_pos = expr.MlslAst.e_pos; rv_kind = RVRecord rd' }, code'))
+	| MlslAst.ESelect(e, field) ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code ESelect.";
+		None
 	| MlslAst.EPair(e1, e2) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EPair.";
 		None

@@ -1,5 +1,94 @@
 (* File: mlslAst.ml *)
 
+module Swizzle = struct
+	exception Not_swizzle
+
+	type component =
+	| X
+	| Y
+	| Z
+	| W
+
+	type t =
+	| S1 of component
+	| S2 of component * component
+	| S3 of component * component * component
+	| S4 of component * component * component * component
+
+	let component_of_char c =
+		match c with
+		| 'x' -> X
+		| 'y' -> Y
+		| 'z' -> Z
+		| 'w' -> W
+		| _ -> raise Not_swizzle
+
+	let of_string str =
+		match String.length str with
+		| 1 -> S1 (component_of_char (str.[0]))
+		| 2 -> S2
+				( component_of_char (str.[0])
+				, component_of_char (str.[1])
+				)
+		| 3 -> S3
+				( component_of_char (str.[0])
+				, component_of_char (str.[1])
+				, component_of_char (str.[2])
+				)
+		| 4 -> S4
+				( component_of_char (str.[0])
+				, component_of_char (str.[1])
+				, component_of_char (str.[2])
+				, component_of_char (str.[3])
+				)
+		| _ -> raise Not_swizzle
+
+	let try_of_string str =
+		try Some(of_string str) with
+		| Not_swizzle -> None
+
+	let component_to_string c =
+		match c with
+		| X -> "x"
+		| Y -> "y"
+		| Z -> "z"
+		| W -> "w"
+
+	let to_string swizzle =
+		match swizzle with
+		| S1 c1              -> component_to_string c1
+		| S2(c1, c2)         -> component_to_string c1 ^ component_to_string c2
+		| S3(c1, c2, c3)     -> 
+			component_to_string c1 ^ component_to_string c2 ^ component_to_string c3
+		| S4(c1, c2, c3, c4) -> 
+			component_to_string c1 ^ component_to_string c2 ^ 
+			component_to_string c3 ^ component_to_string c4
+
+	let size swizzle =
+		match swizzle with
+		| S1 _ -> 1
+		| S2 _ -> 2
+		| S3 _ -> 3
+		| S4 _ -> 4
+
+	let component_id c =
+		match c with
+		| X -> 0
+		| Y -> 1
+		| Z -> 2
+		| W -> 3
+
+	let max_component_id swizzle =
+		match swizzle with
+		| S1 c1              -> component_id c1
+		| S2(c1, c2)         -> max (component_id c1) (component_id c2)
+		| S3(c1, c2, c3)     -> 
+			max (component_id c1) (max (component_id c2) (component_id c3))
+		| S4(c1, c2, c3, c4) ->  max 
+				(max (component_id c1) (component_id c2))
+				(max (component_id c3) (component_id c4))
+end
+
 type typ =
 | TBool
 | TFloat
@@ -31,7 +120,9 @@ and expr_kind =
 | EVar     of string
 | EVarying of string
 | EInt     of int
+| ESwizzle of expr * Swizzle.t
 | ERecord  of record_field_value list
+| ESelect  of expr * string
 | EPair    of expr * expr
 | EMul     of expr * expr
 | EApp     of expr * expr
@@ -81,6 +172,11 @@ let rec make_app func args =
 	match args with
 	| [] -> func
 	| arg :: args -> make_app (make_expr arg.e_pos (EApp(func, arg))) args
+
+let make_select pos expr field =
+	match Swizzle.try_of_string field with
+	| None         -> make_expr pos (ESelect(expr, field))
+	| Some swizzle -> make_expr pos (ESwizzle(expr, swizzle))
 
 let is_reg_type tp =
 	match tp with
