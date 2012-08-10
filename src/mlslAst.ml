@@ -115,6 +115,20 @@ type typ_term =
 	; tt_typ : typ
 	}
 
+type binop =
+| BOAdd
+| BOSub
+| BOMul
+| BODiv
+| BOMod
+| BODot
+| BOCross
+| BOPow
+
+type unop =
+| UONeg
+| UOPlus
+
 type expr =
 	{ e_pos  : Lexing.position
 	; e_kind : expr_kind
@@ -127,7 +141,8 @@ and expr_kind =
 | ERecord  of record_field_value list
 | ESelect  of expr * string
 | EPair    of expr * expr
-| EMul     of expr * expr
+| EBinOp   of binop * expr * expr
+| EUnOp    of unop * expr
 | EApp     of expr * expr
 and record_field_value =
 	{ rfv_pos   : Lexing.position
@@ -242,6 +257,22 @@ let rec string_of_typ p tp =
 			(string_of_typ 0 t)
 			(List.fold_left (fun s (n, t) -> s ^ "; " ^ n ^ " : " ^ string_of_typ 0 t) "" r)
 	| TVertexTop -> "vertex_top"
+
+let binop_name op =
+	match op with
+	| BOAdd   -> "addition"
+	| BOSub   -> "subtraction"
+	| BOMul   -> "multiplication"
+	| BODiv   -> "division"
+	| BOMod   -> "modulo"
+	| BODot   -> "dot product"
+	| BOCross -> "cross product"
+	| BOPow   -> "power"
+
+let unop_name op =
+	match op with
+	| UONeg  -> "unary minus"
+	| UOPlus -> "unary plus"
 
 let foreachShader td_list f =
 	List.iter (fun td ->

@@ -8,10 +8,11 @@ type variable_sort =
 | VSVarying
 
 type variable =
-	{         var_id   : int
-	;         var_size : int * int
-	; mutable var_reg  : (int * int) option
-	;         var_sort : variable_sort
+	{         var_id         : int
+	;         var_size       : int * int
+	; mutable var_reg        : (int * int) option
+	; mutable var_vec3output : bool (* set to true when con not contain w component *)
+	;         var_sort       : variable_sort
 	}
 
 type attr =
@@ -84,9 +85,23 @@ type sampler =
 
 type instr_kind =
 | IMov of dest * source
+| IAdd of dest * source * source
+| ISub of dest * source * source
 | IMul of dest * source * source
+| IDiv of dest * source * source
+| IFrc of dest * source
+| IPow of dest * source * source
+| ICrs of dest * source * source
+| IDp3 of dest * source * source
+| IDp4 of dest * source * source
+| INeg of dest * source
+| IM33 of dest * source * source
 | IM44 of dest * source * source
+| IM34 of dest * source * source
 | ITex of dest * source * sampler
+(* Pseudo-instructions (generated instruction depends on locations 
+ * binded to registers). *)
+| ICrs2 of dest * source * source
 type instr =
 	{ ins_id   : int
 	; ins_kind : instr_kind

@@ -53,6 +53,20 @@ type typ_term =
 	; tt_typ : typ
 	}
 
+type binop =
+| BOAdd
+| BOSub
+| BOMul
+| BODiv
+| BOMod
+| BODot
+| BOCross
+| BOPow
+
+type unop =
+| UONeg
+| UOPlus
+
 type expr =
 	{ e_pos  : Lexing.position
 	; e_kind : expr_kind
@@ -65,7 +79,8 @@ and expr_kind =
 | ERecord  of record_field_value list
 | ESelect  of expr * string
 | EPair    of expr * expr
-| EMul     of expr * expr
+| EBinOp   of binop * expr * expr
+| EUnOp    of unop * expr
 | EApp     of expr * expr
 and record_field_value =
 	{ rfv_pos   : Lexing.position
@@ -115,5 +130,7 @@ val is_data_type    : typ -> bool
 val is_sampler_type : typ -> bool
 
 val string_of_typ : int -> typ -> string
+val binop_name : binop -> string
+val unop_name  : unop -> string
 
 val foreachShader : topdef list -> (topdef -> string -> expr -> unit) -> unit

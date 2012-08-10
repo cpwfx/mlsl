@@ -17,6 +17,12 @@ let int_of_dim d =
 	| Dim3 -> 3
 	| Dim4 -> 4
 
+let range_of_dim d =
+	match d with
+	| Dim2 -> [ 0; 1 ]
+	| Dim3 -> [ 0; 1; 2 ]
+	| Dim4 -> [ 0; 1; 2; 3 ]
+
 let dim_of_ast d =
 	match d with
 	| MlslAst.Dim2 -> Dim2
@@ -82,11 +88,45 @@ type param =
 	; param_var  : variable
 	}
 
+type binop =
+| BOAddF
+| BOAddM  of dim * dim
+| BOAddV  of dim
+| BOSubF
+| BOSubM  of dim * dim
+| BOSubV  of dim
+| BOMulFF
+| BOMulMF of dim * dim
+| BOMulMM of dim * dim * dim
+| BOMulMV of dim * dim
+| BOMulVF of dim
+| BOMulVV of dim
+| BODivFF
+| BODivFV of dim
+| BODivMF of dim * dim
+| BODivVF of dim
+| BODivVV of dim
+| BOModFF
+| BOModFV of dim
+| BOModMF of dim * dim
+| BOModVF of dim
+| BOModVV of dim
+| BODot   of dim
+| BOCross2
+| BOCross3
+| BOPowFF
+| BOPowVF of dim
+| BOPowVV of dim
+
+type unop =
+| UONegF
+| UONegM of dim * dim
+| UONegV of dim
+
 type instr_kind =
 | IMov     of variable * variable
-| IMulFF   of variable * variable * variable
-| IMulMV   of variable * variable * variable * dim * dim
-| IMulVF   of variable * variable * variable * dim
+| IBinOp   of variable * variable * variable * binop
+| IUnOp    of variable * variable * unop
 | ISwizzle of variable * variable * MlslAst.Swizzle.t
 | ITex     of variable * variable * sampler
 | IRet     of variable
@@ -315,6 +355,140 @@ let string_of_rvkind kind =
 	| RVRecord _ -> "record"
 	| RVSampler _ -> "sampler"
 
+let typ_and_ins_of_add pos tp1 tp2 =
+	match tp1, tp2 with
+	| TFloat, TFloat -> 
+		Some (TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOAddF))
+	| TMat(d1, d2), TMat(d1', d2') when d1 = d1' && d2 = d2' ->
+		Some (TMat(d1, d2), fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOAddM(d1, d2)))
+	| TVec d, TVec d' when d = d' ->
+		Some (TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOAddV d))
+	| _ ->
+		Errors.error_p pos
+			(Printf.sprintf "Addition for types %s * %s is not defined."
+				(string_of_typ tp1) (string_of_typ tp2));
+		None
+
+let typ_and_ins_of_sub pos tp1 tp2 =
+	match tp1, tp2 with
+	| TFloat, TFloat -> 
+		Some (TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOSubF))
+	| TMat(d1, d2), TMat(d1', d2') when d1 = d1' && d2 = d2' ->
+		Some (TMat(d1, d2), fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOSubM(d1, d2)))
+	| TVec d, TVec d' when d = d' ->
+		Some (TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOSubV d))
+	| _ ->
+		Errors.error_p pos
+			(Printf.sprintf "Subtraction for types %s * %s is not defined."
+				(string_of_typ tp1) (string_of_typ tp2));
+		None
+
+let typ_and_ins_of_mul pos tp1 tp2 =
+	match tp1, tp2 with
+	| TFloat, TFloat -> Some (TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulFF))
+	| TFloat, TMat(d1, d2) -> 
+		Some (TMat(d1, d2), fun r1 r2 r3 -> IBinOp(r1, r3, r2, BOMulMF(d1, d2)))
+	| TFloat, TVec d ->
+		Some (TVec d, fun r1 r2 r3 -> IBinOp(r1, r3, r2, BOMulVF d))
+	| TMat(d1, d2), TFloat ->
+		Some (TMat(d1, d2), fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulMF(d1, d2)))
+	| TMat(d1, d2), TMat(d3, d4) when d2 = d3 ->
+		Some (TMat(d1, d4), fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulMM(d1, d2, d4)))
+	| TMat(d1, d2), TVec d when d2 = d -> 
+		Some (TVec d1,  fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulMV(d1, d2)))
+	| TVec d, TFloat  -> Some (TVec d,  fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulVF d))
+	| TVec d1, TVec d2 when d1 = d2 ->
+		Some (TVec d1, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulVV d1))
+	| _ ->
+		Errors.error_p pos
+			(Printf.sprintf "Multiplication for types %s * %s is not defined."
+				(string_of_typ tp1) (string_of_typ tp2));
+		None
+
+let typ_and_ins_of_div pos tp1 tp2 =
+	match tp1, tp2 with
+	| TFloat, TFloat -> Some (TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODivFF))
+	| TFloat, TVec d -> Some (TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODivFV d))
+	| TMat(d1, d2), TFloat -> 
+		Some (TMat(d1, d2), fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODivMF(d1, d2)))
+	| TVec d, TFloat -> Some (TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODivVF d))
+	| TVec d, TVec d' when d = d' ->
+		Some (TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODivVV d))
+	| _ ->
+		Errors.error_p pos
+			(Printf.sprintf "Division for types %s * %s is not defined."
+				(string_of_typ tp1) (string_of_typ tp2));
+		None
+
+let typ_and_ins_of_mod pos tp1 tp2 =
+	match tp1, tp2 with
+	| TFloat, TFloat -> Some(TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOModFF))
+	| TFloat, TVec d -> Some(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOModFV d))
+	| TMat(d1, d2), TFloat ->
+		Some (TMat(d1, d2), fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOModMF(d1, d2)))
+	| TVec d, TFloat -> Some(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOModVF d))
+	| TVec d, TVec d' when d = d' ->
+		Some (TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOModVV d))
+	| _ ->
+		Errors.error_p pos
+			(Printf.sprintf "Modulo for types %s * %s is not defined."
+				(string_of_typ tp1) (string_of_typ tp2));
+		None
+
+let typ_and_ins_of_dot pos tp1 tp2 =
+	match tp1, tp2 with
+	| TFloat, TFloat -> Some(TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulFF))
+	| TVec d, TVec d' when d = d' -> 
+		Some(TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODot d))
+	| _ ->
+		Errors.error_p pos
+			(Printf.sprintf "Dot product for types %s * %s is not defined."
+				(string_of_typ tp1) (string_of_typ tp2));
+		None
+
+let typ_and_ins_of_cross pos tp1 tp2 =
+	match tp1, tp2 with
+	| TVec Dim2, TVec Dim2 -> Some(TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOCross2))
+	| TVec Dim3, TVec Dim3 -> Some(TVec Dim3, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOCross3))
+	| _ ->
+		Errors.error_p pos
+			(Printf.sprintf "Cross product for types %s * %s is not defined."
+				(string_of_typ tp1) (string_of_typ tp2));
+		None
+
+let typ_and_ins_of_pow pos tp1 tp2 =
+	match tp1, tp2 with
+	| TFloat, TFloat -> Some(TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOPowFF))
+	| TVec d, TFloat -> Some(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOPowVF d))
+	| TVec d, TVec d' when d = d' ->
+		Some(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOPowVV d))
+	| _ ->
+		Errors.error_p pos
+			(Printf.sprintf "Power for types %s * %s is not defined."
+				(string_of_typ tp1) (string_of_typ tp2));
+		None
+
+let typ_and_ins_of_neg pos tp =
+	match tp with
+	| TFloat -> Some(TFloat, fun r1 r2 -> IUnOp(r1, r2, UONegF))
+	| TMat(d1, d2) -> Some(TMat(d1, d2), fun r1 r2 -> IUnOp(r1, r2, UONegM(d1, d2)))
+	| TVec d -> Some(TVec d, fun r1 r2 -> IUnOp(r1, r2, UONegV d))
+	| _ ->
+		Errors.error_p pos
+			(Printf.sprintf "Unary minus for type %s is not defined."
+				(string_of_typ tp));
+		None
+
+let typ_and_ins_of_uplus pos tp =
+	match tp with
+	| TFloat | TMat _ | TVec _ ->
+		Some(tp, fun r1 r2 -> IMov(r1, r2))
+	| _ ->
+		Errors.error_p pos
+			(Printf.sprintf "Unary plus for type %s is not defined."
+				(string_of_typ tp));
+		None
+
 let unfold_code_var vertex code gamma expr x =
 	if StrMap.mem x gamma then begin 
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code_var EVar gamma(x).";
@@ -468,48 +642,72 @@ let rec unfold_code vertex code gamma expr =
 	| MlslAst.EPair(e1, e2) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EPair.";
 		None
-	| MlslAst.EMul(e1, e2) ->
+	| MlslAst.EBinOp(op, e1, e2) ->
 		Misc.Opt.bind (unfold_code vertex code gamma e1) (fun (rv1, code) ->
 		Misc.Opt.bind (unfold_code vertex code gamma e2) (fun (rv2, code) ->
 			match rv1.rv_kind, rv2.rv_kind with
 			| RVReg r1, RVReg r2 ->
-				Misc.Opt.map_f (
-					match r1.var_typ, r2.var_typ with
-					| TFloat, TFloat -> Some (TFloat, fun r1 r2 r3 -> IMulFF(r1, r2, r3))
-					| TMat(d1, d2), TVec d when d2 = d -> 
-						Some (TVec d1,  fun r1 r2 r3 -> IMulMV(r1, r2, r3, d1, d2))
-					| TVec d, TFloat  -> Some (TVec d,  fun r1 r2 r3 -> IMulVF(r1, r2, r3, d))
-					| t1, t2 ->
-						Errors.error_p expr.MlslAst.e_pos
-							(Printf.sprintf "Multiplication for types %s * %s is not defined."
-								(string_of_typ t1) (string_of_typ t2));
-						None
-					) (fun (rtp, cons) ->
-						let rreg = create_variable VSTemporary rtp in
-						Misc.ImpList.add code (create_instr (cons rreg r1 r2));
-						( { rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }, code )
-					)
-			| RVRecord _, _ ->
+				let rtp_ins = 
+					match op with
+					| MlslAst.BOAdd ->
+						typ_and_ins_of_add expr.MlslAst.e_pos r1.var_typ r2.var_typ
+					| MlslAst.BOSub ->
+						typ_and_ins_of_sub expr.MlslAst.e_pos r1.var_typ r2.var_typ
+					| MlslAst.BOMul -> 
+						typ_and_ins_of_mul expr.MlslAst.e_pos r1.var_typ r2.var_typ
+					| MlslAst.BODiv ->
+						typ_and_ins_of_div expr.MlslAst.e_pos r1.var_typ r2.var_typ
+					| MlslAst.BOMod ->
+						typ_and_ins_of_mod expr.MlslAst.e_pos r1.var_typ r2.var_typ
+					| MlslAst.BODot ->
+						typ_and_ins_of_dot expr.MlslAst.e_pos r1.var_typ r2.var_typ
+					| MlslAst.BOCross ->
+						typ_and_ins_of_cross expr.MlslAst.e_pos r1.var_typ r2.var_typ
+					| MlslAst.BOPow ->
+						typ_and_ins_of_pow expr.MlslAst.e_pos r1.var_typ r2.var_typ
+				in Misc.Opt.map_f rtp_ins (fun (rtp, ins) ->
+					let rreg = create_variable VSTemporary rtp in
+					Misc.ImpList.add code (create_instr (ins rreg r1 r2));
+					( { rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }, code )
+				)
+			| RVReg _, _ ->
 				Errors.error_p expr.MlslAst.e_pos 
-					(Printf.sprintf "First operand defined at %s is a record, can not be multiplied."
-						(Errors.string_of_pos rv1.rv_pos));
+					(Printf.sprintf "Second operand of %s defined at %s can not be a %s."
+						(MlslAst.binop_name op)
+						(Errors.string_of_pos rv2.rv_pos)
+						(string_of_rvkind rv2.rv_kind));
 				None
-			| RVSampler _, _ ->
+			| _ ->
 				Errors.error_p expr.MlslAst.e_pos 
-					(Printf.sprintf "First operand defined at %s is a sampler, can not be multiplied."
-						(Errors.string_of_pos rv1.rv_pos));
-				None
-			| _, RVRecord _ ->
-				Errors.error_p expr.MlslAst.e_pos 
-					(Printf.sprintf "Second operand defined at %s is a record, can not be multiplied."
-						(Errors.string_of_pos rv2.rv_pos));
-				None
-			| _, RVSampler _ ->
-				Errors.error_p expr.MlslAst.e_pos 
-					(Printf.sprintf "Second operand defined at %s is a sampler, can not be multiplied."
-						(Errors.string_of_pos rv2.rv_pos));
+					(Printf.sprintf "First operand of %s defined at %s can not be a %s."
+						(MlslAst.binop_name op)
+						(Errors.string_of_pos rv1.rv_pos)
+						(string_of_rvkind rv1.rv_kind));
 				None
 		))
+	| MlslAst.EUnOp(op, e) ->
+		Misc.Opt.bind (unfold_code vertex code gamma e) (fun (rv, code) ->
+			match rv.rv_kind with
+			| RVReg r ->
+				let rtp_ins =
+					match op with
+					| MlslAst.UONeg ->
+						typ_and_ins_of_neg expr.MlslAst.e_pos r.var_typ
+					| MlslAst.UOPlus ->
+						typ_and_ins_of_uplus expr.MlslAst.e_pos r.var_typ
+				in Misc.Opt.map_f rtp_ins (fun (rtp, ins) ->
+					let rreg = create_variable VSTemporary rtp in
+					Misc.ImpList.add code (create_instr (ins rreg r));
+					( { rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }, code )
+				)
+			| _ ->
+				Errors.error_p expr.MlslAst.e_pos 
+					(Printf.sprintf "First operand of %s defined at %s can not be a %s."
+						(MlslAst.unop_name op)
+						(Errors.string_of_pos rv.rv_pos)
+						(string_of_rvkind rv.rv_kind));
+				None
+		)
 	| MlslAst.EApp(e1, e2) ->
 		Misc.Opt.bind (unfold_code vertex code gamma e1) (fun (func, code) ->
 		Misc.Opt.bind (unfold_code vertex code gamma e2) (fun (rvarg, code) ->

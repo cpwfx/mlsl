@@ -32,12 +32,19 @@ let _ =
 
 let op_map = Hashtbl.create 32
 let _ =
+	Hashtbl.add op_map "&"  MlslParser.AMPER;
 	Hashtbl.add op_map "->" MlslParser.ARROW;
 	Hashtbl.add op_map ":"  MlslParser.COLON;
 	Hashtbl.add op_map ","  MlslParser.COMMA;
+	Hashtbl.add op_map "/"  MlslParser.DIV;
 	Hashtbl.add op_map "."  MlslParser.DOT;
 	Hashtbl.add op_map "="  MlslParser.EQ;
+	Hashtbl.add op_map "^"  MlslParser.HAT;
+	Hashtbl.add op_map "-"  MlslParser.MINUS;
+	Hashtbl.add op_map "%"  MlslParser.MOD;
 	Hashtbl.add op_map "*"  MlslParser.MUL;
+	Hashtbl.add op_map "+"  MlslParser.PLUS;
+	Hashtbl.add op_map "**" MlslParser.POW;
 	Hashtbl.add op_map ";"  MlslParser.SEMI;
 	()
 	

@@ -6,6 +6,7 @@ type dim =
 | Dim4
 
 val int_of_dim : dim -> int
+val range_of_dim : dim -> int list
 val dim_of_ast : MlslAst.dim -> dim
 
 type typ =
@@ -67,11 +68,45 @@ type param =
 	; param_var  : variable
 	}
 
+type binop =
+| BOAddF
+| BOAddM  of dim * dim
+| BOAddV  of dim
+| BOSubF
+| BOSubM  of dim * dim
+| BOSubV  of dim
+| BOMulFF
+| BOMulMF of dim * dim
+| BOMulMM of dim * dim * dim
+| BOMulMV of dim * dim
+| BOMulVF of dim
+| BOMulVV of dim
+| BODivFF
+| BODivFV of dim
+| BODivMF of dim * dim
+| BODivVF of dim
+| BODivVV of dim
+| BOModFF
+| BOModFV of dim
+| BOModMF of dim * dim
+| BOModVF of dim
+| BOModVV of dim
+| BODot   of dim
+| BOCross2
+| BOCross3
+| BOPowFF
+| BOPowVF of dim
+| BOPowVV of dim
+
+type unop =
+| UONegF
+| UONegM of dim * dim
+| UONegV of dim
+
 type instr_kind =
 | IMov     of variable * variable
-| IMulFF   of variable * variable * variable
-| IMulMV   of variable * variable * variable * dim * dim
-| IMulVF   of variable * variable * variable * dim
+| IBinOp   of variable * variable * variable * binop
+| IUnOp    of variable * variable * unop
 | ISwizzle of variable * variable * MlslAst.Swizzle.t
 | ITex     of variable * variable * sampler
 | IRet     of variable

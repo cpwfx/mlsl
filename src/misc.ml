@@ -38,6 +38,10 @@ end
 
 module ListExt = struct
 	type 'a t = 'a list
+	let rec concat_map f l =
+		match l with
+		| [] -> []
+		| x::xs -> f x @ concat_map f xs
 	let is_empty l =
 		match l with
 		| [] -> true
@@ -69,6 +73,10 @@ module Opt = struct
 		match a with
 		| None -> ()
 		| Some av -> f av
+	let map f a =
+		match a with
+		| None -> None
+		| Some av -> Some (f av)
 	let map_f a f =
 		match a with
 		| None -> None

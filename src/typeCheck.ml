@@ -55,8 +55,11 @@ let rec infer_type gamma worlds expr =
 	| MlslAst.EPair(v1, v2) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EPair.";
 		[]
-	| MlslAst.EMul(v1, v2) ->
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EMul.";
+	| MlslAst.EBinOp(op, v1, v2) ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EBinOp.";
+		[]
+	| MlslAst.EUnOp(op, v) ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EUnOp.";
 		[]
 	| MlslAst.EApp(e1, e2) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EApp.";
@@ -89,9 +92,11 @@ let rec fast_check_code gamma expr =
 	| MlslAst.EPair(v1, v2) ->
 		fast_check_code gamma v1;
 		fast_check_code gamma v2
-	| MlslAst.EMul(v1, v2) ->
+	| MlslAst.EBinOp(_, v1, v2) ->
 		fast_check_code gamma v1;
 		fast_check_code gamma v2
+	| MlslAst.EUnOp(_, v) ->
+		fast_check_code gamma v
 	| MlslAst.EApp(e1, e2) ->
 		fast_check_code gamma e1;
 		fast_check_code gamma e2

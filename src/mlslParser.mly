@@ -3,7 +3,7 @@
 %token <string> FLOAT
 %token EOF
 %token BR_OPN BR_CLS CBR_OPN CBR_CLS
-%token ARROW COLON COMMA DOT EQ MUL SEMI
+%token AMPER ARROW COLON COMMA DIV DOT EQ HAT MINUS MOD MUL PLUS POW SEMI
 %token KW_ATTR KW_BOOL KW_CONST KW_FLOAT KW_FRAGMENT KW_INT KW_LET KW_MAT22 
 %token KW_MAT23 KW_MAT24 KW_MAT32 KW_MAT33 KW_MAT34 KW_MAT42 KW_MAT43 KW_MAT44
 %token KW_SAMPLER KW_SAMPLER2D KW_SAMPLERCUBE KW_SHADER KW_UNIT KW_VEC2 KW_VEC3 
@@ -11,7 +11,10 @@
 
 %right ARROW
 %left  COMMA
-%left  MUL
+%left  MINUS PLUS
+%left  AMPER DIV HAT MOD MUL
+%left  UMINUS UPLUS
+%right POW
 
 %start main
 %type <MlslAst.topdef list> main
@@ -70,8 +73,45 @@ expr_nosemi:
 	  expr_nosemi COMMA expr_nosemi {
 			MlslAst.make_expr (Parsing.rhs_start_pos 2) (MlslAst.EPair($1, $3))
 		}
+	| expr_nosemi MINUS expr_nosemi {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
+				(MlslAst.EBinOp(MlslAst.BOSub, $1, $3))
+		}
+	| expr_nosemi PLUS expr_nosemi {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
+				(MlslAst.EBinOp(MlslAst.BOAdd, $1, $3))
+		}
+	| expr_nosemi AMPER expr_nosemi {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
+				(MlslAst.EBinOp(MlslAst.BODot, $1, $3))
+		}
+	| expr_nosemi DIV expr_nosemi {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
+				(MlslAst.EBinOp(MlslAst.BODiv, $1, $3))
+		}
+	| expr_nosemi HAT expr_nosemi {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
+				(MlslAst.EBinOp(MlslAst.BOCross, $1, $3))
+		}
+	| expr_nosemi MOD expr_nosemi {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
+				(MlslAst.EBinOp(MlslAst.BOMod, $1, $3))
+		}
 	| expr_nosemi MUL expr_nosemi {
-			MlslAst.make_expr (Parsing.rhs_start_pos 2) (MlslAst.EMul($1, $3))
+			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
+				(MlslAst.EBinOp(MlslAst.BOMul, $1, $3))
+		}
+	| MINUS expr_nosemi %prec UMINUS {
+			MlslAst.make_expr (Parsing.rhs_start_pos 1) 
+				(MlslAst.EUnOp(MlslAst.UONeg, $2))
+		}
+	| PLUS expr_nosemi %prec UPLUS {
+			MlslAst.make_expr (Parsing.rhs_start_pos 1) 
+				(MlslAst.EUnOp(MlslAst.UOPlus, $2))
+		}
+	| expr_nosemi POW expr_nosemi {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
+				(MlslAst.EBinOp(MlslAst.BOPow, $1, $3))
 		}
 	| expr_call_atom expr_call_atom_list_rev {
 			MlslAst.make_app $1 (List.rev $2)

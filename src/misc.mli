@@ -28,8 +28,9 @@ end
 
 module ListExt : sig
 	type 'a t = 'a list
-	val is_empty : 'a list -> bool
-	val map_filter : ('a -> 'b option) -> 'a list -> 'b list
+	val concat_map    : ('a -> 'b list) -> 'a list -> 'b list
+	val is_empty      : 'a list -> bool
+	val map_filter    : ('a -> 'b option) -> 'a list -> 'b list
 	val opt_fold_left : ('a -> 'b -> 'b option) -> 'b option -> 'a list -> 'b option
 end
 
@@ -37,6 +38,7 @@ module Opt : sig
 	type 'a t = 'a option
 	val bind  : 'a t -> ('a -> 'b t) -> 'b t
 	val iter  : 'a t -> ('a -> unit) -> unit
+	val map   : ('a -> 'b) -> 'a t -> 'b t
 	val map_f : 'a t -> ('a -> 'b) -> 'b t
 	val value : 'a t -> 'a
 end

@@ -8,10 +8,11 @@ type variable_sort =
 | VSVarying
 
 type variable =
-	{         var_id   : int
-	;         var_size : int * int
-	; mutable var_reg  : (int * int) option
-	;         var_sort : variable_sort
+	{         var_id         : int
+	;         var_size       : int * int
+	; mutable var_reg        : (int * int) option
+	; mutable var_vec3output : bool (* set to true when con not contain w component *)
+	;         var_sort       : variable_sort
 	}
 
 type attr =
@@ -84,9 +85,23 @@ type sampler =
 
 type instr_kind =
 | IMov of dest * source
+| IAdd of dest * source * source
+| ISub of dest * source * source
 | IMul of dest * source * source
+| IDiv of dest * source * source
+| IFrc of dest * source
+| IPow of dest * source * source
+| ICrs of dest * source * source
+| IDp3 of dest * source * source
+| IDp4 of dest * source * source
+| INeg of dest * source
+| IM33 of dest * source * source
 | IM44 of dest * source * source
+| IM34 of dest * source * source
 | ITex of dest * source * sampler
+(* Pseudo-instructions (generated instruction depends on locations 
+ * binded to registers). *)
+| ICrs2 of dest * source * source
 type instr =
 	{ ins_id   : int
 	; ins_kind : instr_kind
@@ -124,11 +139,39 @@ let variable_of_const c =
 
 (* ========================================================================= *)
 
+let instr_dest instr =
+	match instr with
+	| IMov(dest, _)    | IAdd(dest, _, _) | ISub(dest, _, _) 
+	| IMul(dest, _, _) | IDiv(dest, _, _) | IFrc(dest, _)
+	| IPow(dest, _, _) | ICrs(dest, _, _) | IDp3(dest, _, _)
+	| IDp4(dest, _, _) | INeg(dest, _)    | IM33(dest, _, _) 
+	| IM44(dest, _, _) | IM34(dest, _, _) | ITex(dest, _, _)
+	| ICrs2(dest, _, _) -> dest
+
+(* ========================================================================= *)
+
 let var_map     = Hashtbl.create 32
 let sampler_map = Hashtbl.create 32
+let const_map   = Hashtbl.create 32
 
 let fresh_var = Misc.Fresh.create ()
 let fresh_ins = Misc.Fresh.create ()
+
+let get_const_reg const =
+	try
+		Hashtbl.find const_map const
+	with
+	| Not_found -> begin
+		let result =
+			{ var_id         = Misc.Fresh.next fresh_var
+			; var_size       = (List.length const, List.length (List.hd const))
+			; var_reg        = None
+			; var_vec3output = false
+			; var_sort       = VSConstant
+			} in
+		Hashtbl.replace const_map const result;
+		result
+	end
 
 let map_variable var =
 	try
@@ -136,16 +179,17 @@ let map_variable var =
 	with
 	| Not_found -> begin
 		let result =
-			{ var_id   = Misc.Fresh.next fresh_var
-			; var_size =
+			{ var_id         = Misc.Fresh.next fresh_var
+			; var_size       =
 				begin match var.Midlang.var_typ with
 				| Midlang.TFloat       -> (1, 1)
 				| Midlang.TInt         -> (1, 1)
 				| Midlang.TMat(d1, d2) -> (Midlang.int_of_dim d1, Midlang.int_of_dim d2)
 				| Midlang.TVec d       -> (1, Midlang.int_of_dim d)
 				end
-			; var_reg  = None
-			; var_sort =
+			; var_reg        = None
+			; var_vec3output = false
+			; var_sort       =
 				begin match var.Midlang.var_sort with
 				| Midlang.VSAttribute -> VSAttribute
 				| Midlang.VSConstant  -> VSConstant
@@ -156,6 +200,14 @@ let map_variable var =
 		Hashtbl.replace var_map var.Midlang.var_id result;
 		result
 	end
+
+let make_temp_reg rows cols =
+	{ var_id         = Misc.Fresh.next fresh_var
+	; var_size       = (rows, cols)
+	; var_reg        = None
+	; var_vec3output = false
+	; var_sort       = VSTemporary
+	}
 
 let map_attr_variable attr =
 	let var = map_variable attr.Midlang.attr_var in
@@ -223,12 +275,17 @@ let add_const globals vs_const fs_const =
 	; shg_f_const = globals.shg_f_const @ fs_const
 	}
 
-let dst_mask_float = { dmask_x = true; dmask_y = false; dmask_z = false; dmask_w = false }
-let dst_mask_vec2  = { dmask_x = true; dmask_y = true;  dmask_z = false; dmask_w = false }
-let dst_mask_vec3  = { dmask_x = true; dmask_y = true;  dmask_z = true;  dmask_w = false }
-let dst_mask_vec4  = { dmask_x = true; dmask_y = true;  dmask_z = true;  dmask_w = true  }
+let dst_mask_float = { dmask_x = true;  dmask_y = false; dmask_z = false; dmask_w = false }
+let dst_mask_vec2  = { dmask_x = true;  dmask_y = true;  dmask_z = false; dmask_w = false }
+let dst_mask_vec3  = { dmask_x = true;  dmask_y = true;  dmask_z = true;  dmask_w = false }
+let dst_mask_vec4  = { dmask_x = true;  dmask_y = true;  dmask_z = true;  dmask_w = true  }
+let dst_mask_x     = { dmask_x = true;  dmask_y = false; dmask_z = false; dmask_w = false }
+let dst_mask_y     = { dmask_x = false; dmask_y = true;  dmask_z = false; dmask_w = false }
+let dst_mask_z     = { dmask_x = false; dmask_y = false; dmask_z = true;  dmask_w = false }
+let dst_mask_w     = { dmask_x = false; dmask_y = false; dmask_z = false; dmask_w = true  }
 
 let swizzle_nop () = [| 0; 1; 2; 3 |]
+let swizzle_dp2 () = [| 0; 1; 0; 1 |]
 
 let make_swizzle swizzle =
 	match swizzle with
@@ -243,47 +300,107 @@ let make_swizzle swizzle =
 		[| MlslAst.Swizzle.component_id c1; MlslAst.Swizzle.component_id c2
 		;  MlslAst.Swizzle.component_id c3; MlslAst.Swizzle.component_id c4 |]
 
-let make_dest_float reg =
-	{ dst_var  = map_variable reg
+let make_dest_float_reg reg =
+	{ dst_var  = reg
 	; dst_row  = 0
 	; dst_mask = dst_mask_float
 	}
 
-let make_dest dim reg =
-	{ dst_var  = map_variable reg
-	; dst_row  = 0
-	; dst_mask =
+let make_dest_float reg = make_dest_float_reg (map_variable reg)
+
+let make_dest_row_reg row dim reg =
+	{ dst_var  = reg
+	; dst_row  = row
+	; dst_mask = 
 		begin match dim with
 		| Midlang.Dim2 -> dst_mask_vec2
 		| Midlang.Dim3 -> dst_mask_vec3
 		| Midlang.Dim4 -> dst_mask_vec4
 		end
 	}
+let make_dest dim reg = make_dest_row_reg 0 dim (map_variable reg)
+let make_dest_row row dim reg = make_dest_row_reg row dim (map_variable reg)
+let make_dest_reg dim reg = make_dest_row_reg 0 dim reg
+
+let make_dest_comp comp reg =
+	{ dst_var  = map_variable reg
+	; dst_row  = 0
+	; dst_mask =
+		begin match comp with
+		| 0 -> dst_mask_x
+		| 1 -> dst_mask_y
+		| 2 -> dst_mask_z
+		| 3 -> dst_mask_w
+		| _ -> raise Misc.InternalError
+		end
+	}
+
+let make_dest_comp_reg comp reg =
+	{ dst_var  = reg
+	; dst_row  = 0
+	; dst_mask =
+		begin match comp with
+		| 0 -> dst_mask_x
+		| 1 -> dst_mask_y
+		| 2 -> dst_mask_z
+		| 3 -> dst_mask_w
+		| _ -> raise Misc.InternalError
+		end
+	}
 
 let make_dest_output () =
 	{ dst_var  =
-		{ var_id   = Misc.Fresh.next fresh_var
-		; var_size = (1, 4)
-		; var_reg  = Some (0, 0)
-		; var_sort = VSOutput
+		{ var_id         = Misc.Fresh.next fresh_var
+		; var_size       = (1, 4)
+		; var_reg        = Some (0, 0)
+		; var_vec3output = false
+		; var_sort       = VSOutput
 		}
 	; dst_row = 0
 	; dst_mask = dst_mask_vec4
 	}
 
-let make_source reg =
+let make_source_row row reg =
 	{ src_var     = map_variable reg
-	; src_row     = 0
+	; src_row     = row
 	; src_swizzle = swizzle_nop ()
 	; src_offset  = None
 	}
 
-let make_source_float reg =
+let make_source_row_dp2 row reg =
 	{ src_var     = map_variable reg
+	; src_row     = row
+	; src_swizzle = swizzle_dp2 ()
+	; src_offset  = None
+	}
+
+let make_source reg = make_source_row 0 reg
+let make_source_dp2 reg = make_source_row_dp2 0 reg
+
+let make_source_float_reg reg =
+	{ src_var     = reg
 	; src_row     = 0
 	; src_swizzle = [| 0; 0; 0; 0 |]
 	; src_offset  = None
 	}
+
+let make_source_float reg = make_source_float_reg (map_variable reg)
+
+let make_source_row_dim_reg row dim reg =
+	{ src_var     = reg
+	; src_row     = row
+	; src_swizzle =
+		[| 0
+		;  1
+		;  min 2 (Midlang.int_of_dim dim)
+		;  min 3 (Midlang.int_of_dim dim)
+		|]
+	; src_offset  = None
+	}
+
+let make_source_row_dim row dim reg = make_source_row_dim_reg row dim (map_variable reg)
+let make_source_dim dim reg = make_source_row_dim 0 dim reg
+let make_source_dim_reg dim reg = make_source_row_dim_reg 0 dim reg
 
 let make_swizzled_source reg swizzle =
 	{ src_var     = map_variable reg
@@ -292,67 +409,272 @@ let make_swizzled_source reg swizzle =
 	; src_offset  = None
 	}
 
+let make_source_reg reg =
+	{ src_var     = reg
+	; src_row     = 0
+	; src_swizzle = swizzle_nop ()
+	; src_offset  = None
+	}
+
+let make_const_float value =
+	{ src_var     = get_const_reg [[value]]
+	; src_row     = 0
+	; src_swizzle = [| 0; 0; 0; 0 |]
+	; src_offset  = None
+	}
+
 let create_instr kind =
 	{ ins_id   = Misc.Fresh.next fresh_ins
 	; ins_kind = kind
 	}
 
-let build_ins globals const ins =
+let build_binop rv r1 r2 op =
+	match op with
+	| Midlang.BOAddF ->
+		Some [create_instr (IAdd(make_dest_float rv, make_source r1, make_source r2))]
+	| Midlang.BOAddM(dim1, dim) ->
+		Some (List.map (fun row -> create_instr (IAdd(
+					make_dest_row row dim rv, 
+					make_source_row row r1, 
+					make_source_row row r2))
+				) (Midlang.range_of_dim dim1))
+	| Midlang.BOAddV dim ->
+		Some [create_instr (IAdd(make_dest dim rv, make_source r1, make_source r2))]
+	| Midlang.BOSubF ->
+		Some [create_instr (ISub(make_dest_float rv, make_source r1, make_source r2))]
+	| Midlang.BOSubM(dim1, dim) ->
+		Some (List.map (fun row -> create_instr (ISub(
+					make_dest_row row dim rv, 
+					make_source_row row r1, 
+					make_source_row row r2))
+				) (Midlang.range_of_dim dim1))
+	| Midlang.BOSubV dim ->
+		Some [create_instr (ISub(make_dest dim rv, make_source r1, make_source r2))]
+	| Midlang.BOMulFF ->
+		Some [create_instr (IMul(make_dest_float rv, make_source r1, make_source r2))]
+	| Midlang.BOMulMF(dim1, dim) ->
+		Some (List.map (fun row -> create_instr (IMul(
+					make_dest_row row dim rv, 
+					make_source_row row r1, 
+					make_source_float r2))
+				) (Midlang.range_of_dim dim1))
+	| Midlang.BOMulMM(dim1, dim2, dim3) ->
+		Errors.error (Printf.sprintf "Unimplemented Agal.build_binop IMulMM%d%d%d"
+			(Midlang.int_of_dim dim1) (Midlang.int_of_dim dim2)	(Midlang.int_of_dim dim3));
+		None
+	| Midlang.BOMulMV(dim, Midlang.Dim2) ->
+		let tmp = make_temp_reg 1 (Midlang.int_of_dim dim) in
+		Some (List.map (fun row -> create_instr (IDp4(
+					make_dest_comp_reg row tmp,
+					make_source_row_dp2 row r1,
+					make_source_dp2 r2))
+				) (Midlang.range_of_dim dim) @
+			[create_instr (
+				IMul(make_dest dim rv, make_source_reg tmp, make_const_float 0.5)) ])
+	| Midlang.BOMulMV(Midlang.Dim2, Midlang.Dim3) ->
+		Some (List.map (fun row -> create_instr (IDp3(
+					make_dest_comp row rv,
+					make_source_row row r1,
+					make_source r2))
+				) [ 0; 1 ])
+	| Midlang.BOMulMV(Midlang.Dim3, Midlang.Dim3) ->
+		Some [create_instr 
+			(IM33(make_dest Midlang.Dim3 rv, make_source r2, make_source r1))]
+	| Midlang.BOMulMV(Midlang.Dim4, Midlang.Dim3) ->
+		Some
+		[ create_instr 
+			(IM33(make_dest Midlang.Dim3 rv, make_source r2, make_source r1))
+		; create_instr
+			(IDp3(make_dest_comp 3 rv, make_source r2, make_source_row 3 r1))
+		]
+	| Midlang.BOMulMV(Midlang.Dim2, Midlang.Dim4) ->
+		Some (List.map (fun row -> create_instr (IDp4(
+					make_dest_comp row rv,
+					make_source_row row r1,
+					make_source r2))
+				) [ 0; 1 ])
+	| Midlang.BOMulMV(Midlang.Dim3, Midlang.Dim4) ->
+		Some [create_instr 
+			(IM34(make_dest Midlang.Dim3 rv, make_source r2, make_source r1))]
+	| Midlang.BOMulMV(Midlang.Dim4, Midlang.Dim4) ->
+		Some [create_instr 
+			(IM44(make_dest Midlang.Dim4 rv, make_source r2, make_source r1))]
+	| Midlang.BOMulVF dim ->
+		Some [create_instr
+			(IMul(make_dest dim rv, make_source r1, make_source_float r2))]
+	| Midlang.BOMulVV dim ->
+		Some [create_instr
+			(IMul(make_dest dim rv, make_source r1, make_source r2))]
+	| Midlang.BODivFF ->
+		Some [create_instr
+			(IDiv(make_dest_float rv, make_source_float r1, make_source_float r2))]
+	| Midlang.BODivFV dim ->
+		Some [create_instr
+			(IDiv(make_dest dim rv, make_source_float r1, make_source_dim dim r2))]
+	| Midlang.BODivMF(dim1, dim) ->
+		Some (List.map (fun row -> create_instr (IDiv(
+					make_dest_row row dim rv,
+					make_source_row_dim row dim r1,
+					make_source_dim dim r2))
+				) (Midlang.range_of_dim dim1))
+	| Midlang.BODivVF dim ->
+		Some [create_instr
+			(IDiv(make_dest dim rv, make_source_dim dim r1, make_source_float r2))]
+	| Midlang.BODivVV dim ->
+		Some [create_instr
+			(IDiv(make_dest dim rv, make_source_dim dim r1, make_source_dim dim r2))]
+	| Midlang.BOModFF ->
+		let tmp1 = make_temp_reg 1 1 in
+		let tmp2 = make_temp_reg 1 1 in
+		Some
+			[ create_instr (IDiv(
+				make_dest_float_reg tmp1, make_source_float r1, make_source_float r2))
+			; create_instr (IFrc(
+				make_dest_float_reg tmp2, make_source_float_reg tmp1))
+			; create_instr (IMul(
+				make_dest_float rv, make_source_float_reg tmp2, make_source_float r2))
+			]
+	| Midlang.BOModFV dim ->
+		let d = Midlang.int_of_dim dim in
+		let tmp1 = make_temp_reg 1 d in
+		let tmp2 = make_temp_reg 1 d in
+		Some
+			[ create_instr (IDiv(
+				make_dest_reg dim tmp1, make_source_float r1, make_source_dim dim r2))
+			; create_instr (IFrc(
+				make_dest_reg dim tmp2, make_source_dim_reg dim tmp1))
+			; create_instr (IMul(
+				make_dest dim rv, make_source_dim_reg dim tmp2, make_source_dim dim r2))
+			]
+	| Midlang.BOModMF(dim1, dim) ->
+		let d = Midlang.int_of_dim dim in
+		Some (Misc.ListExt.concat_map (fun row -> 
+			let tmp1 = make_temp_reg 1 d in
+			let tmp2 = make_temp_reg 1 d in
+			[ create_instr (IDiv(
+				make_dest_reg dim tmp1, make_source_row_dim row dim r1, make_source_dim dim r2))
+			; create_instr (IFrc(
+				make_dest_reg dim tmp2, make_source_dim_reg dim tmp1))
+			; create_instr (IMul(
+				make_dest_row row dim rv, make_source_dim_reg dim tmp2, make_source_dim dim r2))
+			]) (Midlang.range_of_dim dim1))
+	| Midlang.BOModVF dim ->
+		let d = Midlang.int_of_dim dim in
+		let tmp1 = make_temp_reg 1 d in
+		let tmp2 = make_temp_reg 1 d in
+		Some
+			[ create_instr (IDiv(
+				make_dest_reg dim tmp1, make_source_dim dim r1, make_source_float r2))
+			; create_instr (IFrc(
+				make_dest_reg dim tmp2, make_source_dim_reg dim tmp1))
+			; create_instr (IMul(
+				make_dest dim rv, make_source_dim_reg dim tmp2, make_source_float r2))
+			]
+	| Midlang.BOModVV dim ->
+		let d = Midlang.int_of_dim dim in
+		let tmp1 = make_temp_reg 1 d in
+		let tmp2 = make_temp_reg 1 d in
+		Some
+			[ create_instr (IDiv(
+				make_dest_reg dim tmp1, make_source_dim dim r1, make_source_dim dim r2))
+			; create_instr (IFrc(
+				make_dest_reg dim tmp2, make_source_dim_reg dim tmp1))
+			; create_instr (IMul(
+				make_dest dim rv, make_source_dim_reg dim tmp2, make_source_dim dim r2))
+			]
+	| Midlang.BODot Midlang.Dim2 ->
+		let tmp = make_temp_reg 1 2 in
+		Some
+			[ create_instr (IDp4(
+				make_dest_reg Midlang.Dim2 tmp, make_source_dp2 r1, make_source_dp2 r2))
+			; create_instr (IMul(
+				make_dest Midlang.Dim2 rv, make_source_reg tmp, make_const_float 0.5))
+			]
+	| Midlang.BODot Midlang.Dim3 ->
+		Some [create_instr
+			(IDp3(make_dest_float rv, make_source r1, make_source r2))]
+	| Midlang.BODot Midlang.Dim4 ->
+		Some [create_instr
+			(IDp4(make_dest_float rv, make_source r1, make_source r2))]
+	| Midlang.BOCross2 ->
+		Some [create_instr 
+			(ICrs2(make_dest_float rv, make_source r1, make_source r2))]
+	| Midlang.BOCross3 ->
+		Some [create_instr 
+			(ICrs(make_dest Midlang.Dim3 rv, make_source r1, make_source r2))]
+	| Midlang.BOPowFF ->
+		Some [create_instr 
+			(IPow(make_dest_float rv, make_source_float r1, make_source_float r2))]
+	| Midlang.BOPowVF dim ->
+		Some [create_instr 
+			(IPow(make_dest dim rv, make_source_dim dim r1, make_source_float r2))]
+	| Midlang.BOPowVV dim ->
+		Some [create_instr 
+			(IPow(make_dest dim rv, make_source_dim dim r1, make_source_dim dim r2))]
+
+let build_unop rv r1 op =
+	match op with
+	| Midlang.UONegF ->
+		Some [create_instr(INeg(make_dest_float rv, make_source_float r1))]
+	| Midlang.UONegM(dim1, dim) ->
+		Some (List.map (fun row -> 
+					create_instr (INeg(make_dest_row row dim rv, make_source_row_dim row dim r1))
+				) (Midlang.range_of_dim dim1))
+	| Midlang.UONegV dim ->
+		Some [create_instr(INeg(make_dest dim rv, make_source r1))]
+
+let build_ins globals ins =
 	match ins.Midlang.ins_kind with
 	| Midlang.IMov(dst, src) ->
 		begin match dst.Midlang.var_typ with
 		| Midlang.TFloat ->
-			Some (create_instr (IMov(make_dest_float dst, make_source src)), const)
+			Some [create_instr (IMov(make_dest_float dst, make_source src))]
 		| Midlang.TInt ->
-			Some (create_instr (IMov(make_dest_float dst, make_source src)), const)
+			Some [create_instr (IMov(make_dest_float dst, make_source src))]
 		| Midlang.TMat(d1, d2) ->
 			Errors.error "Unimplemented: Agal.build_ins IMov mat.";
 			None
 		| Midlang.TVec dim ->
-			Some (create_instr (IMov(make_dest dim dst, make_source src)), const)
+			Some [create_instr (IMov(make_dest dim dst, make_source src))]
 		end
-	| Midlang.IMulFF _ ->
-		Errors.error "Unimplemented: Agal.build_ins IMulFF.";
-		None
-	| Midlang.IMulMV(rv, vm, vv, dim, Midlang.Dim4) ->
-		Some (create_instr (IM44(make_dest dim rv, make_source vv, make_source vm)), const)
-	| Midlang.IMulMV(_, _, _, d1, d2) ->
-		Errors.error (Printf.sprintf "Unimplemented: Agal.build_ins IMulMV%d%d."
-			(Midlang.int_of_dim d1) (Midlang.int_of_dim d2));
-		None
-	| Midlang.IMulVF(res, vec, flo, dim) ->
-		Some (create_instr 
-			(IMul(make_dest dim res, make_source vec, make_source_float flo)), 
-			const)
+	| Midlang.IBinOp(rv, r1, r2, op) ->
+		build_binop rv r1 r2 op
+	| Midlang.IUnOp(rv, r1, op) ->
+		build_unop rv r1 op
 	| Midlang.ISwizzle(dst, src, swizzle) ->
 		begin match dst.Midlang.var_typ with
 		| Midlang.TFloat | Midlang.TInt ->
-			Some (
-				create_instr (IMov(make_dest_float dst, make_swizzled_source src swizzle)), 
-				const)
+			Some [create_instr 
+					(IMov(make_dest_float dst, make_swizzled_source src swizzle))]
 		| Midlang.TVec dim ->
-			Some (
-				create_instr (IMov(make_dest dim dst, make_swizzled_source src swizzle)), 
-				const)
+			Some [create_instr 
+					(IMov(make_dest dim dst, make_swizzled_source src swizzle))] 
 		| _ -> raise Misc.InternalError
 		end
 	| Midlang.ITex(rv, vc, sam) ->
-		Some (create_instr 
-			(ITex(make_dest Midlang.Dim4 rv, make_source vc, map_sampler sam)),
-			const)
+		Some [create_instr 
+			(ITex(make_dest Midlang.Dim4 rv, make_source vc, map_sampler sam))]
 	| Midlang.IRet reg ->
-		Some (create_instr (IMov(make_dest_output (), make_source reg)), const)
+		Some [create_instr (IMov(make_dest_output (), make_source reg))]
 
-let rec build_code' globals acc const code =
+let rec build_code' globals acc code =
 	match code with
-	| [] -> Some (List.rev acc, const)
+	| [] -> Some(List.rev acc)
 	| ins :: code ->
-		Misc.Opt.bind (build_ins globals const ins) (fun (ins, const) ->
-			build_code' globals (ins :: acc) const code
+		Misc.Opt.bind (build_ins globals ins) (fun ins ->
+			build_code' globals ((List.rev ins) @ acc) code
 		)
 
 let build_code globals code =
-	build_code' globals [] [] code
+	Hashtbl.clear const_map;
+	Misc.Opt.map_f (build_code' globals [] code) (fun code ->
+			let const = Hashtbl.fold (fun c var const ->
+				ConstValue
+					{ cv_value = Array.of_list (List.map Array.of_list c)
+					; cv_var   = var
+					} :: const) const_map []
+			in (code, const)
+		)
 
 let build sh =
 	Hashtbl.clear var_map;
@@ -385,8 +707,12 @@ module LiveVar = struct
 
 	let transfer instr a =
 		match instr.ins_kind with
-		| IMov(dest, src) | ITex(dest, src, _) -> VarSet.add src.src_var a
-		| IM44(dest, src1, src2) | IMul(dest, src1, src2) -> 
+		| IMov(_, src) | IFrc(_, src) | INeg(_, src) | ITex(_, src, _) -> 
+			VarSet.add src.src_var a
+		| IAdd(_, src1, src2) | ISub(_, src1, src2) | IMul(_, src1, src2)
+		| IDiv(_, src1, src2) | IPow(_, src1, src2) | ICrs(_, src1, src2) 
+		| IDp3(_, src1, src2) | IDp4(_, src1, src2) | IM33(_, src1, src2)
+		| IM44(_, src1, src2) | IM34(_, src1, src2) | ICrs2(_, src1, src2) ->
 			VarSet.add src1.src_var (VarSet.add src2.src_var a)
 
 	let rec compute_loop last code =
@@ -403,6 +729,24 @@ module LiveVar = struct
 
 	let is_alive ins var =
 		VarSet.mem var (Hashtbl.find exit_tab ins.ins_id)
+end
+
+module Vec3Output = struct
+	let compute_instr instr =
+		match instr with
+		| IMov _ | IAdd _ | ISub _ | IMul _ | IDiv _ | IFrc _ | IPow _ 
+		| IDp3 _ | IDp4 _ | INeg _ | IM44 _ | ITex _ -> 
+			()
+		| ICrs(dest, _, _) | IM33(dest, _, _) | IM34(dest, _, _) 
+		| ICrs2(dest, _, _) ->
+			dest.dst_var.var_vec3output <- true
+
+	let rec compute code =
+		match code with
+		| [] -> ()
+		| instr :: code ->
+			compute_instr instr.ins_kind;
+			compute code
 end
 
 let rec bind_glob_registers' free name cnt vars =
@@ -440,6 +784,7 @@ let bind_sampler_registers samplers =
 
 let bind_register_var reg_map shader var =
 	let (sz_reg, sz_fld) = var.var_size in
+	let max_fld = if var.var_vec3output then 3 else 4 in
 	let alloc_var reg fld =
 		for ri = 0 to sz_reg - 1 do
 			for fi = 0 to sz_fld - 1 do
@@ -453,7 +798,7 @@ let bind_register_var reg_map shader var =
 			can_alloc (ri + 1) 0 reg fld
 		else
 			(reg + ri < Array.length reg_map)
-			&& (fld + fi < 4)
+			&& (fld + fi < max_fld)
 			&& (Misc.ListExt.is_empty reg_map.(reg + ri).(fld + fi))
 			&& can_alloc ri (fi + 1) reg fld
 	in
@@ -462,7 +807,7 @@ let bind_register_var reg_map shader var =
 			Errors.error (Printf.sprintf
 				"Can not alloc all temporary variables in %s shader." shader);
 			false
-		end else if fld >= 4 then
+		end else if fld >= max_fld then
 			alloc_loop (reg + 1) 0
 		else if can_alloc 0 0 reg fld then begin
 			alloc_var reg fld;
@@ -485,10 +830,7 @@ let rec bind_registers' reg_map shader code =
 				field_map.(i) <-
 					List.filter (LiveVar.is_alive ins) vars
 			) field_map) reg_map;
-		begin match ins.ins_kind with
-		| IMov(dest, _) | IMul(dest, _, _) | IM44(dest, _, _) 
-		| ITex(dest, _, _) ->
-			bind_register_var reg_map shader dest.dst_var
+		begin bind_register_var reg_map shader (instr_dest ins.ins_kind).dst_var
 		end && bind_registers' reg_map shader code
 
 let bind_registers shader cnt code =
@@ -504,8 +846,16 @@ let finalize sh =
 		bind_glob_registers "varying registers" 
 			8 sh.sh_glob.shg_varying &&
 		bind_sampler_registers sh.sh_glob.shg_samplers &&
-		(LiveVar.compute sh.sh_vertex;   bind_registers "vertex" 8 sh.sh_vertex) &&
-		(LiveVar.compute sh.sh_fragment; bind_registers "fragment" 8 sh.sh_fragment)
+		begin
+			LiveVar.compute sh.sh_vertex;
+			Vec3Output.compute sh.sh_vertex;
+			bind_registers "vertex" 8 sh.sh_vertex
+		end &&
+		begin
+			LiveVar.compute sh.sh_fragment;
+			Vec3Output.compute sh.sh_fragment;
+			bind_registers "fragment" 8 sh.sh_fragment
+		end
 	in
 	if ok then Some sh
 	else None
@@ -627,6 +977,27 @@ let write_source out src dest_offset =
 		LittleEndian.write_byte out 0x80
 	end
 
+let write_crs2_source out src dst_field =
+	let real_src =
+		{ src with src_swizzle =
+			match dst_field with
+			| 0 ->
+				[| src.src_swizzle.(2)
+				;  src.src_swizzle.(0)
+				;  src.src_swizzle.(1)
+				;  src.src_swizzle.(3)
+				|]
+			| 1 ->
+				[| src.src_swizzle.(1)
+				;  src.src_swizzle.(2)
+				;  src.src_swizzle.(0)
+				;  src.src_swizzle.(3)
+				|]
+			| 2 -> src.src_swizzle
+			| _ -> raise Misc.InternalError
+		} in
+	write_source out real_src 0
+
 let sampler_filter_bin filter =
 	match filter with
 	| SFltrNearest -> 0
@@ -674,13 +1045,68 @@ let rec write_bytecode out code =
 			write_dest out dst;
 			write_source out src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
 			LittleEndian.write_int64 out Int64.zero (* dummy source *)
+		| IAdd(dst, src1, src2) ->
+			LittleEndian.write_int out 0x01;
+			write_dest out dst;
+			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		| ISub(dst, src1, src2) ->
+			LittleEndian.write_int out 0x02;
+			write_dest out dst;
+			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
 		| IMul(dst, src1, src2) ->
 			LittleEndian.write_int out 0x03;
 			write_dest out dst;
 			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
 			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		| IDiv(dst, src1, src2) ->
+			LittleEndian.write_int out 0x04;
+			write_dest out dst;
+			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		| IFrc(dst, src) ->
+			LittleEndian.write_int out 0x08;
+			write_dest out dst;
+			write_source out src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+			LittleEndian.write_int64 out Int64.zero (* dummy source *)
+		| IPow(dst, src1, src2) ->
+			LittleEndian.write_int out 0x0B;
+			write_dest out dst;
+			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		| ICrs(dst, src1, src2) ->
+			LittleEndian.write_int out 0x11;
+			write_dest out dst;
+			write_source out src1 0;
+			write_source out src2 0
+		| IDp3(dst, src1, src2) ->
+			LittleEndian.write_int out 0x12;
+			write_dest out dst;
+			write_source out src1 0;
+			write_source out src2 0
+		| IDp4(dst, src1, src2) ->
+			LittleEndian.write_int out 0x13;
+			write_dest out dst;
+			write_source out src1 0;
+			write_source out src2 0
+		| INeg(dst, src) ->
+			LittleEndian.write_int out 0x15;
+			write_dest out dst;
+			write_source out src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+			LittleEndian.write_int64 out Int64.zero (* dummy source *)
+		| IM33(dst, src1, src2) ->
+			LittleEndian.write_int out 0x17;
+			write_dest out dst;
+			write_source out src1 0;
+			write_source out src2 0
 		| IM44(dst, src1, src2) ->
 			LittleEndian.write_int out 0x18;
+			write_dest out dst;
+			write_source out src1 0;
+			write_source out src2 0
+		| IM34(dst, src1, src2) ->
+			LittleEndian.write_int out 0x19;
 			write_dest out dst;
 			write_source out src1 0;
 			write_source out src2 0
@@ -689,6 +1115,11 @@ let rec write_bytecode out code =
 			write_dest out dst;
 			write_source out src 0;
 			write_sampler out sam
+		| ICrs2(dst, src1, src2) ->
+			LittleEndian.write_int out 0x11;
+			write_dest out dst;
+			write_crs2_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+			write_crs2_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)))
 		end;
 		write_bytecode out code
 
