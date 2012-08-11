@@ -4,10 +4,11 @@
 %token EOF
 %token BR_OPN BR_CLS CBR_OPN CBR_CLS
 %token AMPER ARROW COLON COMMA DIV DOT EQ HAT MINUS MOD MUL PLUS POW SEMI
-%token KW_ATTR KW_BOOL KW_CONST KW_FLOAT KW_FRAGMENT KW_INT KW_LET KW_MAT22 
-%token KW_MAT23 KW_MAT24 KW_MAT32 KW_MAT33 KW_MAT34 KW_MAT42 KW_MAT43 KW_MAT44
-%token KW_SAMPLER KW_SAMPLER2D KW_SAMPLERCUBE KW_SHADER KW_UNIT KW_VEC2 KW_VEC3 
-%token KW_VEC4 KW_VERTEX
+%token ANY
+%token KW_ATTR KW_BOOL KW_CONST KW_FLOAT KW_FRAGMENT KW_IN KW_INT KW_LET 
+%token KW_MAT22 KW_MAT23 KW_MAT24 KW_MAT32 KW_MAT33 KW_MAT34 KW_MAT42 KW_MAT43 
+%token KW_MAT44 KW_SAMPLER KW_SAMPLER2D KW_SAMPLERCUBE KW_SHADER KW_UNIT 
+%token KW_VEC2 KW_VEC3 KW_VEC4 KW_VERTEX
 
 %right ARROW
 %left  COMMA
@@ -66,7 +67,10 @@ typ_term:
 ;
 
 expr:
-	expr_nosemi { $1 }
+	  KW_LET pattern EQ expr KW_IN expr {
+			MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.ELet($2, $4, $6))
+		}
+	| expr_nosemi { $1 }
 ;
 
 expr_nosemi:
@@ -147,6 +151,14 @@ record_field_value:
 			; MlslAst.rfv_name  = $1
 			; MlslAst.rfv_value = $3
 			}
+		}
+;
+
+pattern:
+	  ANY { MlslAst.make_pattern (Parsing.rhs_start_pos 1) MlslAst.PAny }
+	| ID  { MlslAst.make_pattern (Parsing.rhs_start_pos 1) (MlslAst.PVar $1) }
+	| ID COLON typ_term {
+			MlslAst.make_pattern (Parsing.rhs_start_pos 1) (MlslAst.PTypedVar($1, $3))
 		}
 ;
 

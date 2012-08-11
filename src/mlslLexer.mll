@@ -3,11 +3,13 @@
 
 let kw_map = Hashtbl.create 32
 let _ =
+	Hashtbl.add kw_map "_"           MlslParser.ANY;
 	Hashtbl.add kw_map "attr"        MlslParser.KW_ATTR;
 	Hashtbl.add kw_map "bool"        MlslParser.KW_BOOL;
 	Hashtbl.add kw_map "const"       MlslParser.KW_CONST;
 	Hashtbl.add kw_map "float"       MlslParser.KW_FLOAT;
 	Hashtbl.add kw_map "fragment"    MlslParser.KW_FRAGMENT;
+	Hashtbl.add kw_map "in"          MlslParser.KW_IN;
 	Hashtbl.add kw_map "int"         MlslParser.KW_INT;
 	Hashtbl.add kw_map "let"         MlslParser.KW_LET;
 	Hashtbl.add kw_map "mat22"       MlslParser.KW_MAT22;

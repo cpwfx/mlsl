@@ -2,7 +2,7 @@
 
 module IntSet = Set.Make(Misc.Int)
 module StrMap = Map.Make(String)
-module StrSet = Map.Make(String)
+module StrSet = Set.Make(String)
 
 let check_field_uniqueness rd =
 	let rec check_uniqueness field_map rd =
@@ -64,9 +64,17 @@ let rec infer_type gamma worlds expr =
 	| MlslAst.EApp(e1, e2) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EApp.";
 		[]
+	| MlslAst.ELet(pat, e1, e2) ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type ELet.";
+		[]
 	end
 
 (* ========================================================================= *)
+
+let rec fast_check_pattern gamma pat =
+	match pat.MlslAst.p_kind with
+	| MlslAst.PAny -> gamma
+	| MlslAst.PVar x | MlslAst.PTypedVar(x, _) -> StrSet.add x gamma
 
 let rec fast_check_code gamma expr =
 	match expr.MlslAst.e_kind with
@@ -100,6 +108,9 @@ let rec fast_check_code gamma expr =
 	| MlslAst.EApp(e1, e2) ->
 		fast_check_code gamma e1;
 		fast_check_code gamma e2
+	| MlslAst.ELet(pat, e1, e2) ->
+		fast_check_code gamma e1;
+		fast_check_code (fast_check_pattern gamma pat) e2
 
 (* ========================================================================= *)
 

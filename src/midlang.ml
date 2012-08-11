@@ -348,12 +348,34 @@ and reg_value_kind =
 | RVReg     of variable
 | RVRecord  of reg_value StrMap.t
 | RVSampler of sampler
+| RVValue   of value
+
+let rec regval_of_value code value =
+	match value.v_kind with
+	| VPair _ ->
+		Errors.error_p value.v_pos "Unimplemented: regval_of_value VPair.";
+		{ rv_pos = value.v_pos; rv_kind = RVValue value }
+	| VFragment _ | VVertex _ ->
+		{ rv_pos = value.v_pos; rv_kind = RVValue value }
 
 let string_of_rvkind kind =
 	match kind with
 	| RVReg _ -> "data type value"
 	| RVRecord _ -> "record"
 	| RVSampler _ -> "sampler"
+	| RVValue _ -> "high level value"
+
+let cast_regval_to_type pos code rv tp =
+	Errors.error_p pos "Unimpleneted: cast_regval_to_type.";
+	None
+
+let rec bind_pattern code gamma pat rv =
+	match pat.MlslAst.p_kind with
+	| MlslAst.PAny   -> Some(gamma, code)
+	| MlslAst.PVar x -> Some(StrMap.add x rv gamma, code)
+	| MlslAst.PTypedVar(x, tp) ->
+		Misc.Opt.bind (cast_regval_to_type pat.MlslAst.p_pos code rv tp.MlslAst.tt_typ) (fun rv' ->
+			Some(StrMap.add x rv' gamma, code))
 
 let typ_and_ins_of_add pos tp1 tp2 =
 	match tp1, tp2 with
@@ -491,8 +513,13 @@ let typ_and_ins_of_uplus pos tp =
 
 let unfold_code_var vertex code gamma expr x =
 	if StrMap.mem x gamma then begin 
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code_var EVar gamma(x).";
-		None
+		try
+			Some(StrMap.find x gamma, code)
+		with
+		| Not_found ->
+			Errors.error_p expr.MlslAst.e_pos 
+				(Printf.sprintf "Unbound variable %s" x);
+			None
 	end else begin match TopDef.check_name x with
 	| None ->
 		Errors.error_p expr.MlslAst.e_pos "Internal error!!!"; None
@@ -728,15 +755,11 @@ let rec unfold_code vertex code gamma expr =
 								(string_of_typ tp));
 						None
 					end
-				| RVRecord _ ->
+				| _ ->
 					Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
-						"Value defined at %s is a record, can not be used as texture coordinates."
-							(Errors.string_of_pos rvarg.rv_pos));
-						None
-				| RVSampler _ ->
-					Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
-						"Value defined at %s is a sampler, can not be used as texture coordinates."
-							(Errors.string_of_pos rvarg.rv_pos));
+						"Value defined at %s is a %s, can not be used as texture coordinates."
+							(Errors.string_of_pos rvarg.rv_pos)
+							(string_of_rvkind rvarg.rv_kind));
 						None
 				end
 			| _ -> 
@@ -745,9 +768,13 @@ let rec unfold_code vertex code gamma expr =
 						(Errors.string_of_pos func.rv_pos));
 					None
 		))
+	| MlslAst.ELet(pat, e1, e2) ->
+		Misc.Opt.bind (unfold_code vertex code gamma e1) (fun (rv1, code) ->
+		Misc.Opt.bind (bind_pattern code gamma pat rv1) (fun (gamma, code) ->
+			unfold_code vertex code gamma e2))
 
-let unfold_vertex gamma expr =
-	Misc.Opt.bind (unfold_code true (Misc.ImpList.create ()) gamma expr) (fun (reg_val, code) ->
+let unfold_vertex gamma expr code =
+	Misc.Opt.bind (unfold_code true code gamma expr) (fun (reg_val, code) ->
 	match reg_val.rv_kind with
 	| RVRecord rd ->
 		if not (StrMap.mem "position" rd) then begin
@@ -795,8 +822,8 @@ let unfold_vertex gamma expr =
 		None
 	)
 
-let unfold_fragment gamma expr =
-	Misc.Opt.bind (unfold_code false (Misc.ImpList.create ()) gamma expr) (fun (reg_val, code) ->
+let unfold_fragment gamma expr code =
+	Misc.Opt.bind (unfold_code false code gamma expr) (fun (reg_val, code) ->
 	match reg_val.rv_kind with
 	| RVReg col ->
 		begin match col.var_typ with
@@ -823,13 +850,17 @@ let unfold_shader name expr =
 		match value.v_kind with
 		| VPair(vs, fs) ->
 			begin match vs.v_kind, fs.v_kind with
-			| VVertex(vs_gamma, vs_code), VFragment(fs_gamma, fs_code) ->
+			| VVertex(vs_gamma, vs_expr), VFragment(fs_gamma, fs_expr) ->
 				Hashtbl.clear attr_map;
 				Hashtbl.clear v_const_map;
 				Hashtbl.clear f_const_map;
 				Hashtbl.clear varying_map;
-				Misc.Opt.bind (unfold_vertex vs_gamma vs_code) (fun vertex ->
-				Misc.Opt.bind (unfold_fragment fs_gamma fs_code) (fun fragment ->
+				let vs_code = Misc.ImpList.create () in
+				let fs_code = Misc.ImpList.create () in
+				let vs_gamma' = StrMap.map (regval_of_value vs_code) vs_gamma in
+				let fs_gamma' = StrMap.map (regval_of_value fs_code) fs_gamma in
+				Misc.Opt.bind (unfold_vertex vs_gamma' vs_expr vs_code) (fun vertex ->
+				Misc.Opt.bind (unfold_fragment fs_gamma' fs_expr fs_code) (fun fragment ->
 					Some
 						{ sh_name     = name
 						; sh_attr     = create_attr_list ()

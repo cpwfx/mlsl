@@ -115,6 +115,15 @@ type typ_term =
 	; tt_typ : typ
 	}
 
+type pattern =
+	{ p_pos  : Lexing.position
+	; p_kind : pattern_kind
+	}
+and pattern_kind =
+| PAny
+| PVar      of string
+| PTypedVar of string * typ_term
+
 type binop =
 | BOAdd
 | BOSub
@@ -144,6 +153,7 @@ and expr_kind =
 | EBinOp   of binop * expr * expr
 | EUnOp    of unop * expr
 | EApp     of expr * expr
+| ELet     of pattern * expr * expr
 and record_field_value =
 	{ rfv_pos   : Lexing.position
 	; rfv_name  : string
@@ -186,6 +196,11 @@ let int_of_dim d =
 	| Dim2 -> 2
 	| Dim3 -> 3
 	| Dim4 -> 4
+
+let make_pattern pos kind =
+	{ p_pos  = pos
+	; p_kind = kind
+	}
 
 let make_expr pos kind =
 	{ e_pos  = pos
