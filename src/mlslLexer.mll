@@ -9,6 +9,7 @@ let _ =
 	Hashtbl.add kw_map "const"       MlslParser.KW_CONST;
 	Hashtbl.add kw_map "float"       MlslParser.KW_FLOAT;
 	Hashtbl.add kw_map "fragment"    MlslParser.KW_FRAGMENT;
+	Hashtbl.add kw_map "fun"         MlslParser.KW_FUN;
 	Hashtbl.add kw_map "in"          MlslParser.KW_IN;
 	Hashtbl.add kw_map "int"         MlslParser.KW_INT;
 	Hashtbl.add kw_map "let"         MlslParser.KW_LET;

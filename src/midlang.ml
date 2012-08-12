@@ -347,6 +347,7 @@ and reg_value_kind =
 | RVReg     of variable
 | RVRecord  of reg_value StrMap.t
 | RVSampler of sampler
+| RVFunc    of reg_value StrMap.t * MlslAst.pattern * MlslAst.expr
 | RVValue   of value
 
 exception Unfold_exception
@@ -361,10 +362,11 @@ let rec regval_of_value code value =
 
 let string_of_rvkind kind =
 	match kind with
-	| RVReg _ -> "data type value"
-	| RVRecord _ -> "record"
+	| RVReg _     -> "data type value"
+	| RVRecord _  -> "record"
 	| RVSampler _ -> "sampler"
-	| RVValue _ -> "high level value"
+	| RVFunc _    -> "function"
+	| RVValue _   -> "high level value"
 
 let cast_regval_to_type pos code rv tp =
 	Errors.error_p pos "Unimpleneted: cast_regval_to_type.";
@@ -727,6 +729,8 @@ let rec unfold_code vertex code gamma expr =
 					(string_of_rvkind rv.rv_kind));
 			raise Unfold_exception
 		end
+	| MlslAst.EAbs(pat, e) ->
+		{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVFunc(gamma, pat, e) }
 	| MlslAst.EApp(e1, e2) ->
 		let func  = unfold_code vertex code gamma e1 in
 		let rvarg = unfold_code vertex code gamma e2 in
@@ -753,6 +757,16 @@ let rec unfold_code vertex code gamma expr =
 						(Errors.string_of_pos rvarg.rv_pos)
 						(string_of_rvkind rvarg.rv_kind));
 					raise Unfold_exception
+			end
+		| RVFunc(closure, pat, body) ->
+			if !credits <= 0 then begin
+				Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+					"Too complex functional code. Unfolding requires mare than 1024 function applications.");
+				raise Unfold_exception
+			end else begin
+				credits := !credits - 1;
+				let gamma = bind_pattern code closure pat rvarg in
+				unfold_code vertex code gamma body
 			end
 		| _ -> 
 			Errors.error_p expr.MlslAst.e_pos (Printf.sprintf

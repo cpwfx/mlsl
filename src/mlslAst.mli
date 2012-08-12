@@ -90,6 +90,7 @@ and expr_kind =
 | EPair    of expr * expr
 | EBinOp   of binop * expr * expr
 | EUnOp    of unop * expr
+| EAbs     of pattern * expr
 | EApp     of expr * expr
 | ELet     of pattern * expr * expr
 and record_field_value =
@@ -133,9 +134,10 @@ val int_of_dim : dim -> int
 
 val make_pattern : Lexing.position -> pattern_kind -> pattern
 
-val make_expr   : Lexing.position -> expr_kind -> expr
-val make_app    : expr -> expr list -> expr
-val make_select : Lexing.position -> expr -> string -> expr
+val make_expr    : Lexing.position -> expr_kind -> expr
+val make_abs_rev : Lexing.position -> pattern list -> expr -> expr
+val make_app     : expr -> expr list -> expr
+val make_select  : Lexing.position -> expr -> string -> expr
 
 val is_reg_type     : typ -> bool
 val is_data_type    : typ -> bool

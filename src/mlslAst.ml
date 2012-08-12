@@ -152,6 +152,7 @@ and expr_kind =
 | EPair    of expr * expr
 | EBinOp   of binop * expr * expr
 | EUnOp    of unop * expr
+| EAbs     of pattern * expr
 | EApp     of expr * expr
 | ELet     of pattern * expr * expr
 and record_field_value =
@@ -206,6 +207,11 @@ let make_expr pos kind =
 	{ e_pos  = pos
 	; e_kind = kind
 	}
+
+let rec make_abs_rev pos args body =
+	match args with
+	| [] -> body
+	| arg :: args -> make_abs_rev pos args (make_expr pos (EAbs(arg, body)))
 
 let rec make_app func args =
 	match args with
