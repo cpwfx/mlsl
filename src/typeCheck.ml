@@ -9,13 +9,12 @@ let check_field_uniqueness rd =
 		match rd with
 		| [] -> ()
 		| fld :: rd ->
-			(if StrMap.mem fld.MlslAst.rfv_name field_map then
+			begin if StrMap.mem fld.MlslAst.rfv_name field_map then
 				Errors.error_p fld.MlslAst.rfv_pos
-					(Printf.sprintf "Redefinition of field %s. Previous definition at %s."
-						fld.MlslAst.rfv_name
-						(Errors.string_of_pos (StrMap.find fld.MlslAst.rfv_name field_map))
-					)
-			);
+					"Redefinition of field %s. Previous definition at %s."
+					fld.MlslAst.rfv_name
+					(Errors.string_of_pos (StrMap.find fld.MlslAst.rfv_name field_map));
+			end;
 			check_uniqueness (StrMap.add fld.MlslAst.rfv_name fld.MlslAst.rfv_pos field_map) rd
 	in check_uniqueness StrMap.empty rd
 
@@ -86,8 +85,7 @@ let rec fast_check_code gamma expr =
 		| None ->
 			if StrSet.mem x gamma then ()
 			else 
-				Errors.error_p expr.MlslAst.e_pos 
-					(Printf.sprintf "Undefined variable %s." x)
+				Errors.error_p expr.MlslAst.e_pos "Undefined variable %s." x
 		| Some _ -> ()
 		end
 	| MlslAst.EVarying x -> ()
@@ -135,8 +133,7 @@ let check_semantics semantics =
 	| "TEXCOORD2" -> ()
 	| "TEXCOORD3" -> ()
 	| sn ->
-		Errors.error_p semantics.MlslAst.asem_pos (
-			Printf.sprintf "Unknown semantics: %s." sn)
+		Errors.error_p semantics.MlslAst.asem_pos "Unknown semantics: %s." sn
 
 let is_vertex_type (world, tp) =
 	match tp with
@@ -197,8 +194,8 @@ let check_vertex_shader td name body =
 		let sol     = List.filter is_vertex_type sol_raw in
 		if Misc.ListExt.is_empty sol then
 			Errors.error_p td.MlslAst.td_pos
-				("Vertex shader should have a type { position : vec4 ; ... }, " ^
-				"but types of this shader are:" ^ print_type_list sol_raw)
+				("Vertex shader should have a type { position : vec4 ; ... }, " ^^
+				"but types of this shader are: %s") (print_type_list sol_raw)
 		else
 			let types = List.map make_vertex_shader_type sol in
 			TopDef.add name types td

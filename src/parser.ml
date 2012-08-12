@@ -12,18 +12,15 @@ let parse fname =
 	with
 	| Parsing.Parse_error ->
 		Errors.fatal_error_p (lexbuf.Lexing.lex_start_p)
-			(Printf.sprintf "Syntax error (Unexpected token \"%s\")." 
-				(Lexing.lexeme lexbuf)
-			);
+			"Syntax error (Unexpected token \"%s\")." 
+			(Lexing.lexeme lexbuf);
 		None
 	| ParserMisc.Invalid_character c ->
 		Errors.fatal_error_p (lexbuf.Lexing.lex_start_p)
-			(Printf.sprintf "Invalid character '%s' (0x%X)."
-				(Char.escaped c)
-				(Char.code c)
-			);
+			"Invalid character '%s' (0x%X)."
+			(Char.escaped c) (Char.code c);
 		None
 	| ParserMisc.Unknown_operator op ->
 		Errors.fatal_error_p (lexbuf.Lexing.lex_start_p)
-			(Printf.sprintf "Unrecognized operator \"%s\"." op);
+			"Unrecognized operator \"%s\"." op;
 		None

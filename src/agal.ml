@@ -459,8 +459,8 @@ let build_binop rv r1 r2 op =
 					make_source_float r2))
 				) (Midlang.range_of_dim dim1))
 	| Midlang.BOMulMM(dim1, dim2, dim3) ->
-		Errors.error (Printf.sprintf "Unimplemented Agal.build_binop IMulMM%d%d%d"
-			(Midlang.int_of_dim dim1) (Midlang.int_of_dim dim2)	(Midlang.int_of_dim dim3));
+		Errors.error "Unimplemented Agal.build_binop IMulMM%d%d%d"
+			(Midlang.int_of_dim dim1) (Midlang.int_of_dim dim2)	(Midlang.int_of_dim dim3);
 		None
 	| Midlang.BOMulMV(dim, Midlang.Dim2) ->
 		let tmp = make_temp_reg 1 (Midlang.int_of_dim dim) in
@@ -758,8 +758,7 @@ let rec bind_glob_registers' free name cnt vars =
 		if free <= cnt then
 			bind_glob_registers' free name cnt vars
 		else begin
-			Errors.error (Printf.sprintf "I can't pack %s into %d registers"
-				name cnt);
+			Errors.error "I can't pack %s into %d registers" name cnt;
 			false
 		end
 
@@ -804,8 +803,8 @@ let bind_register_var reg_map shader var =
 	in
 	let rec alloc_loop reg fld =
 		if reg >= Array.length reg_map then begin
-			Errors.error (Printf.sprintf
-				"Can not alloc all temporary variables in %s shader." shader);
+			Errors.error
+				"Can not alloc all temporary variables in %s shader." shader;
 			false
 		end else if fld >= max_fld then
 			alloc_loop (reg + 1) 0

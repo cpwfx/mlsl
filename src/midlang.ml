@@ -298,8 +298,7 @@ let create_attr_list () =
 					| "TEXCOORD2" -> STexcoord2
 					| "TEXCOORD3" -> STexcoord3
 					| sem -> 
-						Errors.error (Printf.sprintf 
-							"Internal error: unknown semantics %s." sem);
+						Errors.error "Internal error: unknown semantics %s." sem;
 						SPosition
 					end
 				; attr_var       = Hashtbl.find attr_map name
@@ -389,9 +388,8 @@ let typ_and_ins_of_add pos tp1 tp2 =
 	| TVec d, TVec d' when d = d' ->
 		(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOAddV d))
 	| _ ->
-		Errors.error_p pos
-			(Printf.sprintf "Addition for types %s * %s is not defined."
-				(string_of_typ tp1) (string_of_typ tp2));
+		Errors.error_p pos "Addition for types %s * %s is not defined."
+			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
 let typ_and_ins_of_sub pos tp1 tp2 =
@@ -403,9 +401,8 @@ let typ_and_ins_of_sub pos tp1 tp2 =
 	| TVec d, TVec d' when d = d' ->
 		(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOSubV d))
 	| _ ->
-		Errors.error_p pos
-			(Printf.sprintf "Subtraction for types %s * %s is not defined."
-				(string_of_typ tp1) (string_of_typ tp2));
+		Errors.error_p pos "Subtraction for types %s * %s is not defined."
+			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
 let typ_and_ins_of_mul pos tp1 tp2 =
@@ -425,9 +422,8 @@ let typ_and_ins_of_mul pos tp1 tp2 =
 	| TVec d1, TVec d2 when d1 = d2 ->
 		(TVec d1, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulVV d1))
 	| _ ->
-		Errors.error_p pos
-			(Printf.sprintf "Multiplication for types %s * %s is not defined."
-				(string_of_typ tp1) (string_of_typ tp2));
+		Errors.error_p pos "Multiplication for types %s * %s is not defined."
+			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
 let typ_and_ins_of_div pos tp1 tp2 =
@@ -440,9 +436,8 @@ let typ_and_ins_of_div pos tp1 tp2 =
 	| TVec d, TVec d' when d = d' ->
 		(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODivVV d))
 	| _ ->
-		Errors.error_p pos
-			(Printf.sprintf "Division for types %s * %s is not defined."
-				(string_of_typ tp1) (string_of_typ tp2));
+		Errors.error_p pos "Division for types %s * %s is not defined."
+			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
 let typ_and_ins_of_mod pos tp1 tp2 =
@@ -455,9 +450,8 @@ let typ_and_ins_of_mod pos tp1 tp2 =
 	| TVec d, TVec d' when d = d' ->
 		(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOModVV d))
 	| _ ->
-		Errors.error_p pos
-			(Printf.sprintf "Modulo for types %s * %s is not defined."
-				(string_of_typ tp1) (string_of_typ tp2));
+		Errors.error_p pos "Modulo for types %s * %s is not defined."
+			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
 let typ_and_ins_of_dot pos tp1 tp2 =
@@ -466,9 +460,8 @@ let typ_and_ins_of_dot pos tp1 tp2 =
 	| TVec d, TVec d' when d = d' -> 
 		(TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODot d))
 	| _ ->
-		Errors.error_p pos
-			(Printf.sprintf "Dot product for types %s * %s is not defined."
-				(string_of_typ tp1) (string_of_typ tp2));
+		Errors.error_p pos "Dot product for types %s * %s is not defined."
+			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
 let typ_and_ins_of_cross pos tp1 tp2 =
@@ -476,9 +469,8 @@ let typ_and_ins_of_cross pos tp1 tp2 =
 	| TVec Dim2, TVec Dim2 -> (TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOCross2))
 	| TVec Dim3, TVec Dim3 -> (TVec Dim3, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOCross3))
 	| _ ->
-		Errors.error_p pos
-			(Printf.sprintf "Cross product for types %s * %s is not defined."
-				(string_of_typ tp1) (string_of_typ tp2));
+		Errors.error_p pos "Cross product for types %s * %s is not defined."
+			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
 let typ_and_ins_of_pow pos tp1 tp2 =
@@ -488,9 +480,8 @@ let typ_and_ins_of_pow pos tp1 tp2 =
 	| TVec d, TVec d' when d = d' ->
 		(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOPowVV d))
 	| _ ->
-		Errors.error_p pos
-			(Printf.sprintf "Power for types %s * %s is not defined."
-				(string_of_typ tp1) (string_of_typ tp2));
+		Errors.error_p pos "Power for types %s * %s is not defined."
+			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
 let typ_and_ins_of_neg pos tp =
@@ -499,9 +490,8 @@ let typ_and_ins_of_neg pos tp =
 	| TMat(d1, d2) -> (TMat(d1, d2), fun r1 r2 -> IUnOp(r1, r2, UONegM(d1, d2)))
 	| TVec d -> (TVec d, fun r1 r2 -> IUnOp(r1, r2, UONegV d))
 	| _ ->
-		Errors.error_p pos
-			(Printf.sprintf "Unary minus for type %s is not defined."
-				(string_of_typ tp));
+		Errors.error_p pos "Unary minus for type %s is not defined."
+			(string_of_typ tp);
 		raise Unfold_exception
 
 let typ_and_ins_of_uplus pos tp =
@@ -509,9 +499,8 @@ let typ_and_ins_of_uplus pos tp =
 	| TFloat | TMat _ | TVec _ ->
 		(tp, fun r1 r2 -> IMov(r1, r2))
 	| _ ->
-		Errors.error_p pos
-			(Printf.sprintf "Unary plus for type %s is not defined."
-				(string_of_typ tp));
+		Errors.error_p pos "Unary plus for type %s is not defined."
+			(string_of_typ tp);
 		raise Unfold_exception
 
 let unfold_code_var vertex code gamma expr x =
@@ -520,8 +509,7 @@ let unfold_code_var vertex code gamma expr x =
 			StrMap.find x gamma
 		with
 		| Not_found ->
-			Errors.error_p expr.MlslAst.e_pos 
-				(Printf.sprintf "Unbound variable %s" x);
+			Errors.error_p expr.MlslAst.e_pos "Unbound variable %s" x;
 			raise Unfold_exception
 	end else begin match TopDef.check_name x with
 	| None ->
@@ -592,8 +580,7 @@ let rec unfold_code vertex code gamma expr =
 				}
 		with
 		| Not_found ->
-			Errors.error_p expr.MlslAst.e_pos (Printf.sprintf 
-				"Undefinded varying variable $%s." x);
+			Errors.error_p expr.MlslAst.e_pos "Undefinded varying variable $%s." x;
 			raise Unfold_exception
 		end
 	| MlslAst.EInt n ->
@@ -612,11 +599,10 @@ let rec unfold_code vertex code gamma expr =
 						(create_instr (ISwizzle(rreg, rvreg, swizzle)));
 					{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }
 				else begin
-					Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+					Errors.error_p expr.MlslAst.e_pos
 						"Value defined at %s has type float, can not be swizzled using pattern %s."
-							(Errors.string_of_pos rv.rv_pos)
-							(MlslAst.Swizzle.to_string swizzle)
-						);
+						(Errors.string_of_pos rv.rv_pos)
+						(MlslAst.Swizzle.to_string swizzle);
 					raise Unfold_exception
 				end
 			| TVec d ->
@@ -627,28 +613,25 @@ let rec unfold_code vertex code gamma expr =
 						(create_instr (ISwizzle(rreg, rvreg, swizzle)));
 					{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }
 				else begin
-					Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+					Errors.error_p expr.MlslAst.e_pos
 						"Value defined at %s has type %s, can not be swizzled using pattern %s."
-							(Errors.string_of_pos rv.rv_pos)
-							(string_of_typ rvreg.var_typ)
-							(MlslAst.Swizzle.to_string swizzle)
-						);
+						(Errors.string_of_pos rv.rv_pos)
+						(string_of_typ rvreg.var_typ)
+						(MlslAst.Swizzle.to_string swizzle);
 					raise Unfold_exception
 				end
 			| tp ->
-				Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+				Errors.error_p expr.MlslAst.e_pos
 					"Value defined at %s has type %s, can not be swizzled."
-						(Errors.string_of_pos rv.rv_pos)
-						(string_of_typ tp)
-					);
+					(Errors.string_of_pos rv.rv_pos)
+					(string_of_typ tp);
 				raise Unfold_exception
 			end
 		| kind ->
-			Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+			Errors.error_p expr.MlslAst.e_pos
 				"Value defined at %s is a %s, can not be swizzled."
-					(Errors.string_of_pos rv.rv_pos)
-					(string_of_rvkind kind)
-				);
+				(Errors.string_of_pos rv.rv_pos)
+				(string_of_rvkind kind);
 			raise Unfold_exception
 		end
 	| MlslAst.ERecord rd ->
@@ -694,17 +677,17 @@ let rec unfold_code vertex code gamma expr =
 			{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }
 		| RVReg _, _ ->
 			Errors.error_p expr.MlslAst.e_pos 
-				(Printf.sprintf "Second operand of %s defined at %s can not be a %s."
-					(MlslAst.binop_name op)
-					(Errors.string_of_pos rv2.rv_pos)
-					(string_of_rvkind rv2.rv_kind));
+				"Second operand of %s defined at %s can not be a %s."
+				(MlslAst.binop_name op)
+				(Errors.string_of_pos rv2.rv_pos)
+				(string_of_rvkind rv2.rv_kind);
 			raise Unfold_exception
 		| _ ->
 			Errors.error_p expr.MlslAst.e_pos 
-				(Printf.sprintf "First operand of %s defined at %s can not be a %s."
-					(MlslAst.binop_name op)
-					(Errors.string_of_pos rv1.rv_pos)
-					(string_of_rvkind rv1.rv_kind));
+				"First operand of %s defined at %s can not be a %s."
+				(MlslAst.binop_name op)
+				(Errors.string_of_pos rv1.rv_pos)
+				(string_of_rvkind rv1.rv_kind);
 			raise Unfold_exception
 		end
 	| MlslAst.EUnOp(op, e) ->
@@ -723,10 +706,10 @@ let rec unfold_code vertex code gamma expr =
 			{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }
 		| _ ->
 			Errors.error_p expr.MlslAst.e_pos 
-				(Printf.sprintf "First operand of %s defined at %s can not be a %s."
-					(MlslAst.unop_name op)
-					(Errors.string_of_pos rv.rv_pos)
-					(string_of_rvkind rv.rv_kind));
+				"First operand of %s defined at %s can not be a %s."
+				(MlslAst.unop_name op)
+				(Errors.string_of_pos rv.rv_pos)
+				(string_of_rvkind rv.rv_kind);
 			raise Unfold_exception
 		end
 	| MlslAst.EAbs(pat, e) ->
@@ -745,23 +728,23 @@ let rec unfold_code vertex code gamma expr =
 						(create_instr (ITex(rreg, coordreg, sampler)));
 					{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }
 				| tp ->
-					Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+					Errors.error_p expr.MlslAst.e_pos
 						"Texture coordinates defined at %s have type %s, but expected vec2."
-							(Errors.string_of_pos rvarg.rv_pos)
-							(string_of_typ tp));
+						(Errors.string_of_pos rvarg.rv_pos)
+						(string_of_typ tp);
 					raise Unfold_exception
 				end
 			| _ ->
-				Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+				Errors.error_p expr.MlslAst.e_pos
 					"Value defined at %s is a %s, can not be used as texture coordinates."
-						(Errors.string_of_pos rvarg.rv_pos)
-						(string_of_rvkind rvarg.rv_kind));
-					raise Unfold_exception
+					(Errors.string_of_pos rvarg.rv_pos)
+					(string_of_rvkind rvarg.rv_kind);
+				raise Unfold_exception
 			end
 		| RVFunc(closure, pat, body) ->
 			if !credits <= 0 then begin
-				Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
-					"Too complex functional code. Unfolding requires mare than 1024 function applications.");
+				Errors.error_p expr.MlslAst.e_pos
+					"Too complex functional code. Unfolding requires mare than 1024 function applications.";
 				raise Unfold_exception
 			end else begin
 				credits := !credits - 1;
@@ -769,9 +752,9 @@ let rec unfold_code vertex code gamma expr =
 				unfold_code vertex code gamma body
 			end
 		| _ -> 
-			Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+			Errors.error_p expr.MlslAst.e_pos
 				"Value defined at %s is not a function/sampler, can not be applied."
-					(Errors.string_of_pos func.rv_pos));
+				(Errors.string_of_pos func.rv_pos);
 				raise Unfold_exception
 		end
 	| MlslAst.ELet(pat, e1, e2) ->
@@ -785,8 +768,8 @@ let unfold_vertex gamma expr code =
 	| RVRecord rd ->
 		if not (StrMap.mem "position" rd) then begin
 			Errors.error_p expr.MlslAst.e_pos 
-				(Printf.sprintf "This record defined at %s has not \"position\" field."
-					(Errors.string_of_pos reg_val.rv_pos));
+				"This record defined at %s has not \"position\" field."
+				(Errors.string_of_pos reg_val.rv_pos);
 			raise Unfold_exception
 		end else begin
 			let ok = StrMap.fold (fun v_name v_rv st ->
@@ -799,8 +782,8 @@ let unfold_vertex gamma expr code =
 					st
 				| _ ->
 					Errors.error_p expr.MlslAst.e_pos 
-						(Printf.sprintf "Field %s defined at %s is not a primitive value."
-							v_name (Errors.string_of_pos v_rv.rv_pos));
+						"Field %s defined at %s is not a primitive value."
+						v_name (Errors.string_of_pos v_rv.rv_pos);
 					false
 				) rd true in
 			match (StrMap.find "position" rd).rv_kind with
@@ -811,17 +794,17 @@ let unfold_vertex gamma expr code =
 					if ok then code
 					else raise Unfold_exception
 				| tp ->
-					Errors.error_p expr.MlslAst.e_pos (Printf.sprintf 
+					Errors.error_p expr.MlslAst.e_pos
 						"Result position of vertex shader defined at %s has type %s, but expected vec4."
 						(Errors.string_of_pos (StrMap.find "position" rd).rv_pos)
-						(string_of_typ tp)
-					); raise Unfold_exception
+						(string_of_typ tp); 
+					raise Unfold_exception
 				end
 			| _ ->
-				Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
-					"Result position of vertex shader defined at %s is not a primitive value."
-						(Errors.string_of_pos (StrMap.find "position" rd).rv_pos)
-				); raise Unfold_exception
+				Errors.error_p expr.MlslAst.e_pos
+				"Result position of vertex shader defined at %s is not a primitive value."
+				(Errors.string_of_pos (StrMap.find "position" rd).rv_pos); 
+				raise Unfold_exception
 		end
 	| _ ->
 		Errors.error_p expr.MlslAst.e_pos "Non record result of vertex shader.";
@@ -836,17 +819,17 @@ let unfold_fragment gamma expr code =
 			Misc.ImpList.add code (create_instr (IRet col));
 			code
 		| tp ->
-			Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+			Errors.error_p expr.MlslAst.e_pos
 				"Result position of fragment shader defined at %s has type %s, but expected vec4."
 				(Errors.string_of_pos reg_val.rv_pos)
-				(string_of_typ tp)
-			); raise Unfold_exception
+				(string_of_typ tp); 
+			raise Unfold_exception
 		end
 	| _ ->
-		Errors.error_p expr.MlslAst.e_pos (Printf.sprintf
+		Errors.error_p expr.MlslAst.e_pos
 			"Result of fragment shader defined at %s is not a primitive value."
-			(Errors.string_of_pos reg_val.rv_pos)
-		); raise Unfold_exception
+			(Errors.string_of_pos reg_val.rv_pos); 
+		raise Unfold_exception
 
 let unfold_shader name expr =
 	credits := 1024;
