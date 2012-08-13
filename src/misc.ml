@@ -20,6 +20,7 @@ module ImpList = struct
 	type 'a t = ('a list) ref
 	let add l x = l := x :: !l
 	let create () = ref []
+	let iter f l  = List.iter f (List.rev !l)
 	let of_list l = ref (List.rev l)
 	let to_list l = List.rev !l
 end

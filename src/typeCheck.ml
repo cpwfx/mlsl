@@ -4,6 +4,34 @@ module IntSet = Set.Make(Misc.Int)
 module StrMap = Map.Make(String)
 module StrSet = Set.Make(String)
 
+module Globals = struct
+	let glob_map = ref StrMap.empty
+
+	let add name types pos =
+		if StrMap.mem name !glob_map then
+			let (_, prev) = StrMap.find name !glob_map in
+			Errors.error_p pos
+				"Redefinition of %s. Previous definition at %s."
+				name (Errors.string_of_pos prev)
+		else
+			glob_map := StrMap.add name (types, pos) !glob_map
+
+	let rec declare_pattern pat =
+		match pat.MlslAst.p_kind with
+		| MlslAst.PAny   -> ()
+		| MlslAst.PVar x | MlslAst.PTypedVar(x, _) ->
+			add x [] pat.MlslAst.p_pos
+
+	let check_name name =
+		try
+			Some (StrMap.find name !glob_map)
+		with
+		| Not_found -> None
+
+	let worlds0 () =
+		TypeWorlds.create (StrMap.map fst !glob_map)
+end
+
 let check_field_uniqueness rd =
 	let rec check_uniqueness field_map rd =
 		match rd with
@@ -69,6 +97,12 @@ let rec infer_type gamma worlds expr =
 	| MlslAst.ELet(pat, e1, e2) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type ELet.";
 		[]
+	| MlslAst.EFragment e ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EFragment.";
+		[]
+	| MlslAst.EVertex e ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EVertex.";
+		[]
 	end
 
 (* ========================================================================= *)
@@ -81,7 +115,7 @@ let rec fast_check_pattern gamma pat =
 let rec fast_check_code gamma expr =
 	match expr.MlslAst.e_kind with
 	| MlslAst.EVar x ->
-		begin match TopDef.check_name x with
+		begin match Globals.check_name x with
 		| None ->
 			if StrSet.mem x gamma then ()
 			else 
@@ -114,6 +148,10 @@ let rec fast_check_code gamma expr =
 	| MlslAst.ELet(pat, e1, e2) ->
 		fast_check_code gamma e1;
 		fast_check_code (fast_check_pattern gamma pat) e2
+	| MlslAst.EFragment e ->
+		fast_check_code gamma e
+	| MlslAst.EVertex e ->
+		fast_check_code gamma e
 
 (* ========================================================================= *)
 
@@ -164,31 +202,35 @@ let check_attr_decl td name semantics typ =
 			"Attributes with not register type forbidden."
 	end;
 	check_semantics semantics;
-	TopDef.add name [typ.MlslAst.tt_typ] td
+	Globals.add name [typ.MlslAst.tt_typ] td.MlslAst.td_pos
 
 let check_const_decl td name typ =
 	begin if not (MlslAst.is_data_type typ.MlslAst.tt_typ) then
 		Errors.error_p typ.MlslAst.tt_pos 
 			"Constants with not data type are forbidden."
 	end;
-	TopDef.add name [typ.MlslAst.tt_typ] td
+	Globals.add name [typ.MlslAst.tt_typ] td.MlslAst.td_pos
 
 let check_sampler_decl td name typ =
 	begin if not (MlslAst.is_sampler_type typ.MlslAst.tt_typ) then
 		Errors.error_p typ.MlslAst.tt_pos
 			"Sampler should have a sampler type."
 	end;
-	TopDef.add name [typ.MlslAst.tt_typ] td
+	Globals.add name [typ.MlslAst.tt_typ] td.MlslAst.td_pos
+
+let fast_check_local_def td pat expr =
+	fast_check_code StrSet.empty expr;
+	Globals.declare_pattern pat
 
 let check_fragment_shader td name body =
 	Errors.error_p td.MlslAst.td_pos "Unimplemented: check_topdef TDFragmentShader."
 
 let fast_check_fragment_shader td name body =
 	fast_check_code StrSet.empty body;
-	TopDef.add name [MlslAst.TFragment []] td
+	Globals.add name [MlslAst.TFragment []] td.MlslAst.td_pos
 
 let check_vertex_shader td name body =
-	begin match infer_type (TopDef.worlds0 ()) [TypeWorlds.main_world] body with
+	begin match infer_type (Globals.worlds0 ()) [TypeWorlds.main_world] body with
 	| [] -> ()
 	| sol_raw ->
 		let sol     = List.filter is_vertex_type sol_raw in
@@ -198,19 +240,20 @@ let check_vertex_shader td name body =
 				"but types of this shader are: %s") (print_type_list sol_raw)
 		else
 			let types = List.map make_vertex_shader_type sol in
-			TopDef.add name types td
+			Globals.add name types td.MlslAst.td_pos
 	end
 
 let fast_check_vertex_shader td name body =
 	fast_check_code StrSet.empty body;
-	TopDef.add name [MlslAst.TVertexTop] td
+	Globals.add name [MlslAst.TVertexTop] td.MlslAst.td_pos
 
 let check_shader td name definition =
 	Errors.error_p td.MlslAst.td_pos "Unimplemented: check_topdef TDShader."
 
 let fast_check_shader td name definition =
 	fast_check_code StrSet.empty definition;
-	TopDef.add name [MlslAst.TPair(MlslAst.TVertexTop, MlslAst.TFragment [])] td
+	Globals.add name [MlslAst.TPair(MlslAst.TVertexTop, MlslAst.TFragment [])]
+		td.MlslAst.td_pos
 
 (* ========================================================================= *)
 
@@ -222,10 +265,8 @@ let check_topdef td =
 		check_const_decl td name typ
 	| MlslAst.TDSamplerDecl(name, typ) ->
 		check_sampler_decl td name typ
-	| MlslAst.TDFragmentShader(name, body) ->
-		check_fragment_shader td name body
-	| MlslAst.TDVertexShader(name, body) ->
-		check_vertex_shader td name body
+	| MlslAst.TDLocalDef(pat, expr) ->
+		Errors.error_p td.MlslAst.td_pos "Unimplemented: check_topdef TDLocalDef."
 	| MlslAst.TDShader(name, definition) ->
 		check_shader td name definition
 
@@ -237,10 +278,8 @@ let fast_check_topdef td =
 		check_const_decl td name typ
 	| MlslAst.TDSamplerDecl(name, typ) ->
 		check_sampler_decl td name typ
-	| MlslAst.TDFragmentShader(name, body) ->
-		fast_check_fragment_shader td name body
-	| MlslAst.TDVertexShader(name, body) ->
-		fast_check_vertex_shader td name body
+	| MlslAst.TDLocalDef(pat, expr) ->
+		fast_check_local_def td pat expr
 	| MlslAst.TDShader(name, definition) ->
 		fast_check_shader td name definition
 

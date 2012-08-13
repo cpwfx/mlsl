@@ -203,73 +203,7 @@ let create_sampler_ast name typ =
 
 (* ========================================================================= *)
 
-type value =
-	{ v_pos  : Lexing.position
-	; v_kind : value_kind
-	}
-and value_kind =
-| VPair     of value * value
-| VVertex   of value StrMap.t * MlslAst.expr
-| VFragment of value StrMap.t * MlslAst.expr
-
-exception Eval_exception
-
 let credits = ref 1024
-let globals = Hashtbl.create 32
-
-let rec eval_expr gamma expr =
-	match expr.MlslAst.e_kind with
-	| MlslAst.EVar x ->
-		begin try
-			StrMap.find x gamma
-		with
-		| Not_found ->
-			eval_global gamma expr.MlslAst.e_pos x
-		end
-	| MlslAst.EVarying x ->
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: eval_expr EVarying.";
-		raise Eval_exception
-	| MlslAst.EInt n ->
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: eval_expr EInt.";
-		raise Eval_exception
-	| MlslAst.ERecord rd ->
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: eval_expr ERecord.";
-		raise Eval_exception
-	| MlslAst.EPair(e1, e2) ->
-		let v1 = eval_expr gamma e1 in
-		let v2 = eval_expr gamma e2 in
-			{ v_pos = expr.MlslAst.e_pos; v_kind = VPair(v1, v2) }
-	| _ ->
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: eval_expr.";
-		raise Eval_exception
-and eval_global gamma pos x =
-	if Hashtbl.mem globals x then
-		Hashtbl.find globals x
-	else match TopDef.check_name x with
-	| None ->
-		Errors.fatal_error "Internal error!!!";
-		raise Eval_exception
-	| Some (_, td) ->
-		let result = 
-			match td.MlslAst.td_kind with
-			| MlslAst.TDAttrDecl _ ->
-				Errors.error "Unimplemented: eval_global TDAttrDecl.";
-				raise Eval_exception
-			| MlslAst.TDConstDecl _ ->
-				Errors.error "Unimplemented: eval_global TDConstDecl.";
-				raise Eval_exception
-			| MlslAst.TDFragmentShader(_, body) ->
-				{ v_pos = pos; v_kind = VFragment(gamma, body) }
-			| MlslAst.TDVertexShader(_, body) ->
-				{ v_pos = pos; v_kind = VVertex(gamma, body) }
-			| _ ->
-				Errors.error "Unimplemented: eval_global.";
-				raise Eval_exception
-		in
-			Hashtbl.add globals x result;
-			result
-
-(* ========================================================================= *)
 
 let attr_map    = Hashtbl.create 32
 let v_const_map = Hashtbl.create 32
@@ -343,29 +277,33 @@ type reg_value =
 	; rv_kind : reg_value_kind
 	}
 and reg_value_kind =
-| RVReg     of variable
-| RVRecord  of reg_value StrMap.t
-| RVSampler of sampler
-| RVFunc    of reg_value StrMap.t * MlslAst.pattern * MlslAst.expr
-| RVValue   of value
+| RVReg        of variable
+| RVRecord     of reg_value StrMap.t
+| RVSampler    of sampler
+| RVFunc       of reg_value StrMap.t * MlslAst.pattern * MlslAst.expr
+| RVValue      of TopDef.value
+| RVShDepValue of TopDef.value
 
 exception Unfold_exception
 
 let rec regval_of_value code value =
-	match value.v_kind with
-	| VPair _ ->
-		Errors.error_p value.v_pos "Unimplemented: regval_of_value VPair.";
-		{ rv_pos = value.v_pos; rv_kind = RVValue value }
-	| VFragment _ | VVertex _ ->
-		{ rv_pos = value.v_pos; rv_kind = RVValue value }
+	match value.TopDef.v_kind with
+	| TopDef.VAttr _ | TopDef.VConst _ | TopDef.VSampler _ ->
+		{ rv_pos = value.TopDef.v_pos; rv_kind = RVShDepValue value }
+	| TopDef.VFragment _ | TopDef.VVertex _ ->
+		{ rv_pos = value.TopDef.v_pos; rv_kind = RVValue value }
+	| TopDef.VPair _ ->
+		Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VPair.";
+		{ rv_pos = value.TopDef.v_pos; rv_kind = RVValue value }
 
 let string_of_rvkind kind =
 	match kind with
-	| RVReg _     -> "data type value"
-	| RVRecord _  -> "record"
-	| RVSampler _ -> "sampler"
-	| RVFunc _    -> "function"
-	| RVValue _   -> "high level value"
+	| RVReg _        -> "data type value"
+	| RVRecord _     -> "record"
+	| RVSampler _    -> "sampler"
+	| RVFunc _       -> "function"
+	| RVValue _      -> "high level value"
+	| RVShDepValue _ -> "shader dependent value"
 
 let cast_regval_to_type pos code rv tp =
 	Errors.error_p pos "Unimpleneted: cast_regval_to_type.";
@@ -503,10 +441,64 @@ let typ_and_ins_of_uplus pos tp =
 			(string_of_typ tp);
 		raise Unfold_exception
 
+let shader_dependent_value pos vertex value =
+	match value.TopDef.v_kind with
+	| TopDef.VAttr(name, semantics, typ) ->
+		if vertex then
+			{ rv_pos  = value.TopDef.v_pos
+			; rv_kind = RVReg (
+				try
+					Hashtbl.find attr_map name
+				with
+				| Not_found ->
+					let v = create_var_ast VSAttribute typ.MlslAst.tt_typ in
+					Hashtbl.add attr_map name v;
+					v
+				)
+			}
+		else begin
+			Errors.error_p pos "Attributes are not available for fragment shaders.";
+			raise Unfold_exception
+		end
+	| TopDef.VConst(name, typ) ->
+		let const_map = if vertex then v_const_map else f_const_map in
+		{ rv_pos  = value.TopDef.v_pos
+		; rv_kind = RVReg (
+			try
+				Hashtbl.find const_map name
+			with
+			| Not_found ->
+				let v = create_var_ast VSConstant typ.MlslAst.tt_typ in
+				Hashtbl.add const_map name v;
+				v
+			)
+		}
+	| TopDef.VSampler(name, typ) ->
+		{ rv_pos = value.TopDef.v_pos
+		; rv_kind = RVSampler (
+			try
+				Hashtbl.find sampler_map name
+			with
+			| Not_found ->
+				let v = create_sampler_ast name typ.MlslAst.tt_typ in
+				Hashtbl.add sampler_map name v;
+				v
+			)
+		}
+	| TopDef.VFragment _ | TopDef.VVertex _ -> 
+		{ rv_pos = value.TopDef.v_pos; rv_kind = RVValue value }
+	| TopDef.VPair _ ->
+		Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VPair.";
+		{ rv_pos = value.TopDef.v_pos; rv_kind = RVValue value }
+
 let unfold_code_var vertex code gamma expr x =
 	if StrMap.mem x gamma then begin 
 		try
-			StrMap.find x gamma
+			let rv = StrMap.find x gamma in
+			match rv.rv_kind with
+			| RVShDepValue value ->
+				shader_dependent_value expr.MlslAst.e_pos vertex value
+			| _ -> rv
 		with
 		| Not_found ->
 			Errors.error_p expr.MlslAst.e_pos "Unbound variable %s" x;
@@ -515,54 +507,8 @@ let unfold_code_var vertex code gamma expr x =
 	| None ->
 		Errors.error_p expr.MlslAst.e_pos "Internal error!!!";
 		raise Misc.InternalError
-	| Some(_, td) ->
-		begin match td.MlslAst.td_kind with
-		| MlslAst.TDAttrDecl(name, _, typ) ->
-			if vertex then
-				{ rv_pos  = td.MlslAst.td_pos
-				; rv_kind = RVReg (
-					try
-						Hashtbl.find attr_map name
-					with
-					| Not_found ->
-						let v = create_var_ast VSAttribute typ.MlslAst.tt_typ in
-						Hashtbl.add attr_map name v;
-						v
-					)
-				}
-			else begin
-				Errors.error_p expr.MlslAst.e_pos "Attributes are not available for fragment shaders.";
-				raise Unfold_exception
-			end
-		| MlslAst.TDConstDecl(name, typ) ->
-			let const_map = if vertex then v_const_map else f_const_map in
-			{ rv_pos  = td.MlslAst.td_pos
-			; rv_kind = RVReg (
-				try
-					Hashtbl.find const_map name
-				with
-				| Not_found ->
-					let v = create_var_ast VSConstant typ.MlslAst.tt_typ in
-					Hashtbl.add const_map name v;
-					v
-				)
-			}
-		| MlslAst.TDSamplerDecl(name, typ) ->
-			{ rv_pos = td.MlslAst.td_pos
-			; rv_kind = RVSampler (
-				try
-					Hashtbl.find sampler_map name
-				with
-				| Not_found ->
-					let v = create_sampler_ast name typ.MlslAst.tt_typ in
-					Hashtbl.add sampler_map name v;
-					v
-				)
-			}
-		| _ ->
-			Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code_var EVar global.";
-			raise Unfold_exception
-		end
+	| Some value ->
+		shader_dependent_value expr.MlslAst.e_pos vertex value
 	end
 
 let rec unfold_code vertex code gamma expr =
@@ -744,7 +690,7 @@ let rec unfold_code vertex code gamma expr =
 		| RVFunc(closure, pat, body) ->
 			if !credits <= 0 then begin
 				Errors.error_p expr.MlslAst.e_pos
-					"Too complex functional code. Unfolding requires mare than 1024 function applications.";
+					"Too complex functional code. Unfolding requires more than 1024 function applications.";
 				raise Unfold_exception
 			end else begin
 				credits := !credits - 1;
@@ -761,6 +707,10 @@ let rec unfold_code vertex code gamma expr =
 		let rv1   = unfold_code vertex code gamma e1 in
 		let gamma = bind_pattern code gamma pat rv1  in
 			unfold_code vertex code gamma e2
+	| MlslAst.EFragment _ | MlslAst.EVertex _ ->
+		Errors.error_p expr.MlslAst.e_pos
+			"Can not unfold shader inside shader.";
+		raise Unfold_exception
 
 let unfold_vertex gamma expr code =
 	let reg_val = unfold_code true code gamma expr in
@@ -831,14 +781,13 @@ let unfold_fragment gamma expr code =
 			(Errors.string_of_pos reg_val.rv_pos); 
 		raise Unfold_exception
 
-let unfold_shader name expr =
+let unfold_shader name value =
 	credits := 1024;
 	try
-		let value = eval_expr StrMap.empty expr in
-		match value.v_kind with
-		| VPair(vs, fs) ->
-			begin match vs.v_kind, fs.v_kind with
-			| VVertex(vs_gamma, vs_expr), VFragment(fs_gamma, fs_expr) ->
+		match value.TopDef.v_kind with
+		| TopDef.VPair(vs, fs) ->
+			begin match vs.TopDef.v_kind, fs.TopDef.v_kind with
+			| TopDef.VVertex(vs_gamma, vs_expr), TopDef.VFragment(fs_gamma, fs_expr) ->
 				Hashtbl.clear attr_map;
 				Hashtbl.clear v_const_map;
 				Hashtbl.clear f_const_map;
@@ -859,18 +808,20 @@ let unfold_shader name expr =
 						; sh_vertex   = Misc.ImpList.to_list vertex
 						; sh_fragment = Misc.ImpList.to_list fragment
 						}
-			| VVertex _, _ ->
-				Errors.error_p fs.v_pos "This expression is not a fragment shader.";
+			| TopDef.VVertex _, _ ->
+				Errors.error_p fs.TopDef.v_pos 
+					"This expression is not a fragment shader.";
 				None
 			| _, _ ->
-				Errors.error_p vs.v_pos "This expression is not a vertex shader.";
+				Errors.error_p vs.TopDef.v_pos 
+					"This expression is not a vertex shader.";
 				None
 			end
 		| _ ->
-			Errors.error_p value.v_pos "Shader must be a pair of vertex and fragment shaders.";
+			Errors.error_p value.TopDef.v_pos 
+				"Shader must be a pair of vertex and fragment shaders.";
 			None
 	with
-	| Eval_exception   -> None
 	| Unfold_exception -> None
 
 (* TODO: better optimizer *)

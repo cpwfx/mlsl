@@ -143,18 +143,20 @@ type expr =
 	; e_kind : expr_kind
 	}
 and expr_kind =
-| EVar     of string
-| EVarying of string
-| EInt     of int
-| ESwizzle of expr * Swizzle.t
-| ERecord  of record_field_value list
-| ESelect  of expr * string
-| EPair    of expr * expr
-| EBinOp   of binop * expr * expr
-| EUnOp    of unop * expr
-| EAbs     of pattern * expr
-| EApp     of expr * expr
-| ELet     of pattern * expr * expr
+| EVar      of string
+| EVarying  of string
+| EInt      of int
+| ESwizzle  of expr * Swizzle.t
+| ERecord   of record_field_value list
+| ESelect   of expr * string
+| EPair     of expr * expr
+| EBinOp    of binop * expr * expr
+| EUnOp     of unop * expr
+| EAbs      of pattern * expr
+| EApp      of expr * expr
+| ELet      of pattern * expr * expr
+| EFragment of expr
+| EVertex   of expr
 and record_field_value =
 	{ rfv_pos   : Lexing.position
 	; rfv_name  : string
@@ -177,12 +179,9 @@ type topdef_kind =
 | TDSamplerDecl
 	of string         (* name *)
 	*  typ_term       (* type *)
-| TDFragmentShader
-	of string         (* name *)
-	*  expr           (* body *)
-| TDVertexShader
-	of string         (* name *)
-	*  expr           (* body *)
+| TDLocalDef
+	of pattern        (* pattern *)
+	*  expr           (* value   *)
 | TDShader
 	of string         (* name *)
 	*  expr           (* definition *)

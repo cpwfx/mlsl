@@ -1,8 +1,9 @@
 SRCDIR=src
 OBJDIR=obj
 BINDIR=bin
-OCAMLFILES=misc errors json littleEndian mlslAst parserMisc mlslParser \
-	mlslLexer parser typeWorlds topDef typeCheck midlang dataflow analysis agal
+OCAMLFILES=misc errors final json littleEndian mlslAst parserMisc mlslParser \
+	mlslLexer parser typeWorlds topDef typeCheck midlang dataflow \
+	analysis agal eval
 .PHONY: all mlslYacc clean
 
 all: $(OBJDIR) $(BINDIR) \

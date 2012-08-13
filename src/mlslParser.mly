@@ -130,6 +130,12 @@ expr_nosemi:
 			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
 				(MlslAst.EBinOp(MlslAst.BOPow, $1, $3))
 		}
+	| KW_FRAGMENT expr_call_atom {
+			MlslAst.make_expr (Parsing.rhs_start_pos 1)	(MlslAst.EFragment $2)
+		}
+	| KW_VERTEX expr_call_atom {
+			MlslAst.make_expr (Parsing.rhs_start_pos 1)	(MlslAst.EVertex $2)
+		}
 	| expr_call_atom expr_call_atom_list_rev {
 			MlslAst.make_app $1 (List.rev $2)
 		}
@@ -200,14 +206,39 @@ topdef:
 			; MlslAst.td_kind = MlslAst.TDConstDecl($2, $4)
 			}
 		}
-	| KW_LET KW_FRAGMENT ID EQ expr {
-			{ MlslAst.td_pos  = Parsing.rhs_start_pos 3
-			; MlslAst.td_kind = MlslAst.TDFragmentShader($3, $5)
+	| KW_LET pattern EQ expr {
+			{ MlslAst.td_pos  = Parsing.rhs_start_pos 2
+			; MlslAst.td_kind = MlslAst.TDLocalDef($2, $4)
 			}
 		}
-	| KW_LET KW_VERTEX ID EQ expr {
+	| KW_LET ID pattern_atom pattern_atom_list_rev EQ expr {
+			let pos = Parsing.rhs_start_pos 2 in
+			{ MlslAst.td_pos  = pos
+			; MlslAst.td_kind = MlslAst.TDLocalDef
+				( MlslAst.make_pattern pos (MlslAst.PVar $2)
+				, MlslAst.make_expr pos (MlslAst.EAbs($3, 
+					MlslAst.make_abs_rev pos $4 $6))
+				)
+			}
+		}
+	| KW_LET KW_FRAGMENT ID pattern_atom_list_rev EQ expr {
+			let pos = Parsing.rhs_start_pos 2 in
 			{ MlslAst.td_pos  = Parsing.rhs_start_pos 3
-			; MlslAst.td_kind = MlslAst.TDVertexShader($3, $5)
+			; MlslAst.td_kind = MlslAst.TDLocalDef
+				( MlslAst.make_pattern pos (MlslAst.PVar $3)
+				, MlslAst.make_abs_rev pos $4 (MlslAst.make_expr pos 
+					(MlslAst.EFragment $6))
+				)
+			}
+		}
+	| KW_LET KW_VERTEX ID pattern_atom_list_rev EQ expr {
+			let pos = Parsing.rhs_start_pos 2 in
+			{ MlslAst.td_pos  = Parsing.rhs_start_pos 3
+			; MlslAst.td_kind = MlslAst.TDLocalDef
+				( MlslAst.make_pattern pos (MlslAst.PVar $3)
+				, MlslAst.make_abs_rev pos $4 (MlslAst.make_expr pos 
+					(MlslAst.EVertex $6))
+				)
 			}
 		}
 	| KW_LET KW_SHADER ID EQ expr {

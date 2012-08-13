@@ -1,8 +1,27 @@
 (* File: topDef.ml *)
 
-module StrMap = Map.Make(String)
+type value =
+	{ v_pos  : Lexing.position
+	; v_kind : value_kind
+	}
+and value_kind =
+| VAttr     of string  * MlslAst.attr_semantics * MlslAst.typ_term
+| VConst    of string  * MlslAst.typ_term
+| VSampler  of string  * MlslAst.typ_term
+| VFragment of closure * MlslAst.expr
+| VVertex   of closure * MlslAst.expr
+| VPair     of value * value
+and closure = value Map.Make(String).t
 
-let topdef_map = ref StrMap.empty
+let make_value pos kind =
+	{ v_pos  = pos
+	; v_kind = kind
+	}
+
+let topdef_map = Hashtbl.create 32
+
+let add name value =
+	Hashtbl.replace topdef_map name value
 
 let attr_list_r    = ref []
 let const_list_r   = ref []
@@ -10,30 +29,21 @@ let sampler_list_r = ref []
 
 let check_name name =
 	try
-		Some (StrMap.find name !topdef_map)
+		Some (Hashtbl.find topdef_map name)
 	with
 	| Not_found -> None
 
-let add name types def =
-	if StrMap.mem name !topdef_map then
-		let (_, prev) = StrMap.find name !topdef_map in
-		Errors.error_p def.MlslAst.td_pos
-			"Redefinition of %s. Previous definition at %s."
-			name (Errors.string_of_pos prev.MlslAst.td_pos);
-	else begin
-		topdef_map := StrMap.add name (types, def) !topdef_map;
-		match def.MlslAst.td_kind with
-		| MlslAst.TDAttrDecl(name, sem, tp) ->
-			attr_list_r := (name, sem, tp) :: !attr_list_r
-		| MlslAst.TDConstDecl(name, tp) ->
-			const_list_r := (name, tp) :: !const_list_r
-		| MlslAst.TDSamplerDecl(name, tp) ->
-			sampler_list_r := (name, tp) :: !sampler_list_r
-		| _ -> ()
-	end
+let add_attr pos name semantics typ =
+	Hashtbl.replace topdef_map name (make_value pos (VAttr(name, semantics, typ)));
+	attr_list_r := (name, semantics, typ) :: !attr_list_r
 
-let worlds0 () =
-	TypeWorlds.create (StrMap.map fst !topdef_map)
+let add_const pos name typ =
+	Hashtbl.replace topdef_map name (make_value pos (VConst(name, typ)));
+	const_list_r := (name, typ) :: !const_list_r
+
+let add_sampler pos name typ =
+	Hashtbl.replace topdef_map name (make_value pos (VSampler(name, typ)));
+	sampler_list_r := (name, typ) :: !sampler_list_r
 
 let attr_list ()    = List.rev !attr_list_r
 let const_list ()   = List.rev !const_list_r
