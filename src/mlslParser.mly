@@ -70,6 +70,15 @@ expr:
 	  KW_LET pattern EQ expr KW_IN expr {
 			MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.ELet($2, $4, $6))
 		}
+	| KW_LET ID pattern_atom pattern_atom_list_rev EQ expr KW_IN expr {
+			let pos1 = Parsing.rhs_start_pos 1 in
+			let pos2 = Parsing.rhs_start_pos 2 in
+			MlslAst.make_expr pos1 (MlslAst.ELet
+				( MlslAst.make_pattern pos2 (MlslAst.PVar $2)
+				, MlslAst.make_expr pos2 (MlslAst.EAbs($3, MlslAst.make_abs_rev pos2 $4 $6))
+				, $8
+				))
+		}
 	| KW_FUN pattern_atom pattern_atom_list_rev ARROW expr {
 			let pos = Parsing.rhs_start_pos 1 in
 			MlslAst.make_expr pos (MlslAst.EAbs($2, MlslAst.make_abs_rev pos $3 $5))

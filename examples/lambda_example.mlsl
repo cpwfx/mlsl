@@ -10,8 +10,8 @@ sampler tex : sampler2D
 
 // vertex shader
 let vertex vs =
-	let identity = fun x -> x in
-	{ position = identity pos
+	let apply f x = f x in
+	{ position = apply (fun x -> x) pos
 	; coord    = coord
 	}
 
