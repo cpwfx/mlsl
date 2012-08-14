@@ -1,0 +1,26 @@
+
+// Const declarations
+const c1          : float
+const col         : vec4
+const projMatrix  : mat44
+
+// Attr declarations
+attr POSITION pos : vec4
+attr TEXCOORD0 coord : vec2
+
+// Samplers declarations
+sampler tex : sampler2D
+
+// vertex shader
+let vertex vs =
+	{ position = projMatrix * pos
+	; c1       = c1
+	; col      = col
+	; coord    = coord
+	}
+
+// fragment shader
+let fragment fs =
+	min ($col * $c1) (tex $coord)
+
+let shader my_shader = (vs, fs)

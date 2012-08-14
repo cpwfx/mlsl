@@ -89,6 +89,7 @@ type instr_kind =
 | ISub of dest * source * source
 | IMul of dest * source * source
 | IDiv of dest * source * source
+| IMin of dest * source * source
 | IFrc of dest * source
 | IPow of dest * source * source
 | ICrs of dest * source * source
@@ -142,11 +143,11 @@ let variable_of_const c =
 let instr_dest instr =
 	match instr with
 	| IMov(dest, _)    | IAdd(dest, _, _) | ISub(dest, _, _) 
-	| IMul(dest, _, _) | IDiv(dest, _, _) | IFrc(dest, _)
-	| IPow(dest, _, _) | ICrs(dest, _, _) | IDp3(dest, _, _)
-	| IDp4(dest, _, _) | INeg(dest, _)    | IM33(dest, _, _) 
-	| IM44(dest, _, _) | IM34(dest, _, _) | ITex(dest, _, _)
-	| ICrs2(dest, _, _) -> dest
+	| IMul(dest, _, _) | IDiv(dest, _, _) | IMin(dest, _, _)
+	| IFrc(dest, _)    | IPow(dest, _, _) | ICrs(dest, _, _) 
+	| IDp3(dest, _, _) | IDp4(dest, _, _) | INeg(dest, _)    
+	| IM33(dest, _, _) | IM44(dest, _, _) | IM34(dest, _, _) 
+	| ITex(dest, _, _) | ICrs2(dest, _, _) -> dest
 
 (* ========================================================================= *)
 
@@ -611,6 +612,12 @@ let build_binop rv r1 r2 op =
 	| Midlang.BOPowVV dim ->
 		Some [create_instr 
 			(IPow(make_dest dim rv, make_source_dim dim r1, make_source_dim dim r2))]
+	| Midlang.BOMinF ->
+		Some [create_instr
+			(IMin(make_dest_float rv, make_source_float r1, make_source_float r2))]
+	| Midlang.BOMinV dim ->
+		Some [create_instr
+			(IMin(make_dest dim rv, make_source_dim dim r1, make_source_dim dim r2))]
 
 let build_unop rv r1 op =
 	match op with
@@ -710,9 +717,10 @@ module LiveVar = struct
 		| IMov(_, src) | IFrc(_, src) | INeg(_, src) | ITex(_, src, _) -> 
 			VarSet.add src.src_var a
 		| IAdd(_, src1, src2) | ISub(_, src1, src2) | IMul(_, src1, src2)
-		| IDiv(_, src1, src2) | IPow(_, src1, src2) | ICrs(_, src1, src2) 
-		| IDp3(_, src1, src2) | IDp4(_, src1, src2) | IM33(_, src1, src2)
-		| IM44(_, src1, src2) | IM34(_, src1, src2) | ICrs2(_, src1, src2) ->
+		| IDiv(_, src1, src2) | IMin(_, src1, src2) | IPow(_, src1, src2) 
+		| ICrs(_, src1, src2) | IDp3(_, src1, src2) | IDp4(_, src1, src2) 
+		| IM33(_, src1, src2) | IM44(_, src1, src2) | IM34(_, src1, src2) 
+		| ICrs2(_, src1, src2) ->
 			VarSet.add src1.src_var (VarSet.add src2.src_var a)
 
 	let rec compute_loop last code =
@@ -734,8 +742,8 @@ end
 module Vec3Output = struct
 	let compute_instr instr =
 		match instr with
-		| IMov _ | IAdd _ | ISub _ | IMul _ | IDiv _ | IFrc _ | IPow _ 
-		| IDp3 _ | IDp4 _ | INeg _ | IM44 _ | ITex _ -> 
+		| IMov _ | IAdd _ | ISub _ | IMul _ | IDiv _ | IMin _ | IFrc _ 
+		| IPow _ | IDp3 _ | IDp4 _ | INeg _ | IM44 _ | ITex _ -> 
 			()
 		| ICrs(dest, _, _) | IM33(dest, _, _) | IM34(dest, _, _) 
 		| ICrs2(dest, _, _) ->
@@ -1061,6 +1069,11 @@ let rec write_bytecode out code =
 			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
 		| IDiv(dst, src1, src2) ->
 			LittleEndian.write_int out 0x04;
+			write_dest out dst;
+			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		| IMin(dst, src1, src2) ->
+			LittleEndian.write_int out 0x06;
 			write_dest out dst;
 			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
 			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));

@@ -1,13 +1,20 @@
 (* File: errors.ml *)
 
+type position =
+| BuiltinPos
+| UserPos    of Lexing.position
+
 let error_counter   = ref 0
 let warning_counter = ref 0
 
 let string_of_pos pos =
-	Printf.sprintf "file %s, line %d, column %d"
-		pos.Lexing.pos_fname
-		pos.Lexing.pos_lnum
-		(pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1)
+	match pos with
+	| BuiltinPos -> "builtin code"
+	| UserPos pos ->
+		Printf.sprintf "file %s, line %d, column %d"
+			pos.Lexing.pos_fname
+			pos.Lexing.pos_lnum
+			(pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1)
 
 let fatal_error_p pos msg =
 	error_counter := !error_counter + 1;

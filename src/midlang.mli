@@ -97,6 +97,8 @@ type binop =
 | BOPowFF
 | BOPowVF of dim
 | BOPowVV of dim
+| BOMinF
+| BOMinV  of dim
 
 type unop =
 | UONegF

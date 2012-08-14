@@ -49,12 +49,12 @@ type typ =
 | TVertexTop
 
 type typ_term =
-	{ tt_pos : Lexing.position
+	{ tt_pos : Errors.position
 	; tt_typ : typ
 	}
 
 type pattern =
-	{ p_pos  : Lexing.position
+	{ p_pos  : Errors.position
 	; p_kind : pattern_kind
 	}
 and pattern_kind =
@@ -71,13 +71,15 @@ type binop =
 | BODot
 | BOCross
 | BOPow
+(* Operators unavailabe from code (only from builtins) *)
+| BOMin
 
 type unop =
 | UONeg
 | UOPlus
 
 type expr =
-	{ e_pos  : Lexing.position
+	{ e_pos  : Errors.position
 	; e_kind : expr_kind
 	}
 and expr_kind =
@@ -96,14 +98,14 @@ and expr_kind =
 | EFragment of expr
 | EVertex   of expr
 and record_field_value =
-	{ rfv_pos   : Lexing.position
+	{ rfv_pos   : Errors.position
 	; rfv_name  : string
 	; rfv_value : expr
 	}
 
 type attr_semantics =
 	{ asem_name : string
-	; asem_pos  : Lexing.position
+	; asem_pos  : Errors.position
 	}
 
 type topdef_kind =
@@ -125,7 +127,7 @@ type topdef_kind =
 	*  expr           (* definition *)
 
 type topdef =
-	{ td_pos  : Lexing.position
+	{ td_pos  : Errors.position
 	; td_kind : topdef_kind
 	}
 

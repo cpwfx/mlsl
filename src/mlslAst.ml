@@ -111,12 +111,12 @@ type typ =
 | TVertexTop
 
 type typ_term =
-	{ tt_pos : Lexing.position
+	{ tt_pos : Errors.position
 	; tt_typ : typ
 	}
 
 type pattern =
-	{ p_pos  : Lexing.position
+	{ p_pos  : Errors.position
 	; p_kind : pattern_kind
 	}
 and pattern_kind =
@@ -133,13 +133,15 @@ type binop =
 | BODot
 | BOCross
 | BOPow
+(* Operators unavailabe from code (only from builtins) *)
+| BOMin
 
 type unop =
 | UONeg
 | UOPlus
 
 type expr =
-	{ e_pos  : Lexing.position
+	{ e_pos  : Errors.position
 	; e_kind : expr_kind
 	}
 and expr_kind =
@@ -158,14 +160,14 @@ and expr_kind =
 | EFragment of expr
 | EVertex   of expr
 and record_field_value =
-	{ rfv_pos   : Lexing.position
+	{ rfv_pos   : Errors.position
 	; rfv_name  : string
 	; rfv_value : expr
 	}
 
 type attr_semantics =
 	{ asem_name : string
-	; asem_pos  : Lexing.position
+	; asem_pos  : Errors.position
 	}
 
 type topdef_kind =
@@ -187,7 +189,7 @@ type topdef_kind =
 	*  expr           (* definition *)
 
 type topdef =
-	{ td_pos  : Lexing.position
+	{ td_pos  : Errors.position
 	; td_kind : topdef_kind
 	}
 
@@ -198,12 +200,12 @@ let int_of_dim d =
 	| Dim4 -> 4
 
 let make_pattern pos kind =
-	{ p_pos  = pos
+	{ p_pos  = Errors.UserPos pos
 	; p_kind = kind
 	}
 
 let make_expr pos kind =
-	{ e_pos  = pos
+	{ e_pos  = Errors.UserPos pos
 	; e_kind = kind
 	}
 
@@ -215,7 +217,7 @@ let rec make_abs_rev pos args body =
 let rec make_app func args =
 	match args with
 	| [] -> func
-	| arg :: args -> make_app (make_expr arg.e_pos (EApp(func, arg))) args
+	| arg :: args -> make_app ({ e_pos = arg.e_pos; e_kind = EApp(func, arg)}) args
 
 let make_select pos expr field =
 	match Swizzle.try_of_string field with
@@ -288,6 +290,7 @@ let binop_name op =
 	| BODot   -> "dot product"
 	| BOCross -> "cross product"
 	| BOPow   -> "power"
+	| BOMin   -> "minimum"
 
 let unop_name op =
 	match op with

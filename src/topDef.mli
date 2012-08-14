@@ -1,7 +1,7 @@
 (* File: topDef.mli *)
 
 type value =
-	{ v_pos  : Lexing.position
+	{ v_pos  : Errors.position
 	; v_kind : value_kind
 	}
 and value_kind =
@@ -11,17 +11,20 @@ and value_kind =
 | VFragment of closure * MlslAst.expr
 | VVertex   of closure * MlslAst.expr
 | VPair     of value * value
+| VFunc     of closure * MlslAst.pattern * MlslAst.expr
 and closure = value Map.Make(String).t
 
-val make_value : Lexing.position -> value_kind -> value
+val empty_context : closure
+
+val make_value : Errors.position -> value_kind -> value
 
 val add : string -> value -> unit
 
 val check_name : string -> value option
 
-val add_attr    : Lexing.position -> string -> MlslAst.attr_semantics -> MlslAst.typ_term -> unit
-val add_const   : Lexing.position -> string -> MlslAst.typ_term -> unit
-val add_sampler : Lexing.position -> string -> MlslAst.typ_term -> unit
+val add_attr    : Errors.position -> string -> MlslAst.attr_semantics -> MlslAst.typ_term -> unit
+val add_const   : Errors.position -> string -> MlslAst.typ_term -> unit
+val add_sampler : Errors.position -> string -> MlslAst.typ_term -> unit
 
 val attr_list : unit -> (string * MlslAst.attr_semantics * MlslAst.typ_term) list
 val const_list : unit -> (string * MlslAst.typ_term) list

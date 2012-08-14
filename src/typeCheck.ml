@@ -32,6 +32,9 @@ module Globals = struct
 		TypeWorlds.create (StrMap.map fst !glob_map)
 end
 
+let declare_builtin name types =
+	Globals.add name types Errors.BuiltinPos
+
 let check_field_uniqueness rd =
 	let rec check_uniqueness field_map rd =
 		match rd with

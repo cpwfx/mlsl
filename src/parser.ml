@@ -11,16 +11,16 @@ let parse fname =
 		Some (MlslParser.main MlslLexer.token lexbuf)
 	with
 	| Parsing.Parse_error ->
-		Errors.fatal_error_p (lexbuf.Lexing.lex_start_p)
+		Errors.fatal_error_p (Errors.UserPos lexbuf.Lexing.lex_start_p)
 			"Syntax error (Unexpected token \"%s\")." 
 			(Lexing.lexeme lexbuf);
 		None
 	| ParserMisc.Invalid_character c ->
-		Errors.fatal_error_p (lexbuf.Lexing.lex_start_p)
+		Errors.fatal_error_p (Errors.UserPos lexbuf.Lexing.lex_start_p)
 			"Invalid character '%s' (0x%X)."
 			(Char.escaped c) (Char.code c);
 		None
 	| ParserMisc.Unknown_operator op ->
-		Errors.fatal_error_p (lexbuf.Lexing.lex_start_p)
+		Errors.fatal_error_p (Errors.UserPos lexbuf.Lexing.lex_start_p)
 			"Unrecognized operator \"%s\"." op;
 		None

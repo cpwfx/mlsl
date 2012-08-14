@@ -117,6 +117,8 @@ type binop =
 | BOPowFF
 | BOPowVF of dim
 | BOPowVV of dim
+| BOMinF
+| BOMinV  of dim
 
 type unop =
 | UONegF
@@ -273,7 +275,7 @@ let create_sampler_list () =
 (* ========================================================================= *)
 
 type reg_value =
-	{ rv_pos  : Lexing.position
+	{ rv_pos  : Errors.position
 	; rv_kind : reg_value_kind
 	}
 and reg_value_kind =
@@ -287,14 +289,20 @@ and reg_value_kind =
 exception Unfold_exception
 
 let rec regval_of_value code value =
-	match value.TopDef.v_kind with
-	| TopDef.VAttr _ | TopDef.VConst _ | TopDef.VSampler _ ->
-		{ rv_pos = value.TopDef.v_pos; rv_kind = RVShDepValue value }
-	| TopDef.VFragment _ | TopDef.VVertex _ ->
-		{ rv_pos = value.TopDef.v_pos; rv_kind = RVValue value }
-	| TopDef.VPair _ ->
-		Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VPair.";
-		{ rv_pos = value.TopDef.v_pos; rv_kind = RVValue value }
+	{ rv_pos = value.TopDef.v_pos
+	; rv_kind =
+		begin match value.TopDef.v_kind with
+		| TopDef.VAttr _ | TopDef.VConst _ | TopDef.VSampler _ ->
+			RVShDepValue value
+		| TopDef.VFragment _ | TopDef.VVertex _ -> RVValue value
+		| TopDef.VPair _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VPair.";
+			RVValue value
+		| TopDef.VFunc(closure, pat, body) ->
+			RVFunc(StrMap.map (regval_of_value code) closure, pat, body)
+		end
+	}
+			
 
 let string_of_rvkind kind =
 	match kind with
@@ -422,6 +430,16 @@ let typ_and_ins_of_pow pos tp1 tp2 =
 			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
+let typ_and_ins_of_min pos tp1 tp2 =
+	match tp1, tp2 with
+	| TFloat, TFloat -> (TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMinF))
+	| TVec d, TVec d' when d = d' ->
+		(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMinV d))
+	| _ ->
+		Errors.error_p pos "Minimum for types %s * %s is not defined."
+			(string_of_typ tp1) (string_of_typ tp2);
+		raise Unfold_exception
+
 let typ_and_ins_of_neg pos tp =
 	match tp with
 	| TFloat -> (TFloat, fun r1 r2 -> IUnOp(r1, r2, UONegF))
@@ -441,55 +459,54 @@ let typ_and_ins_of_uplus pos tp =
 			(string_of_typ tp);
 		raise Unfold_exception
 
-let shader_dependent_value pos vertex value =
-	match value.TopDef.v_kind with
-	| TopDef.VAttr(name, semantics, typ) ->
-		if vertex then
-			{ rv_pos  = value.TopDef.v_pos
-			; rv_kind = RVReg (
+let shader_dependent_value pos code vertex value =
+	{ rv_pos  = value.TopDef.v_pos
+	; rv_kind =
+		begin match value.TopDef.v_kind with
+		| TopDef.VAttr(name, semantics, typ) ->
+			if vertex then
+				RVReg (
+					try
+						Hashtbl.find attr_map name
+					with
+					| Not_found ->
+						let v = create_var_ast VSAttribute typ.MlslAst.tt_typ in
+						Hashtbl.add attr_map name v;
+						v
+					)
+			else begin
+				Errors.error_p pos "Attributes are not available for fragment shaders.";
+				raise Unfold_exception
+			end
+		| TopDef.VConst(name, typ) ->
+			let const_map = if vertex then v_const_map else f_const_map in
+			RVReg (
 				try
-					Hashtbl.find attr_map name
+					Hashtbl.find const_map name
 				with
 				| Not_found ->
-					let v = create_var_ast VSAttribute typ.MlslAst.tt_typ in
-					Hashtbl.add attr_map name v;
+					let v = create_var_ast VSConstant typ.MlslAst.tt_typ in
+					Hashtbl.add const_map name v;
 					v
 				)
-			}
-		else begin
-			Errors.error_p pos "Attributes are not available for fragment shaders.";
-			raise Unfold_exception
+		| TopDef.VSampler(name, typ) ->
+			RVSampler (
+				try
+					Hashtbl.find sampler_map name
+				with
+				| Not_found ->
+					let v = create_sampler_ast name typ.MlslAst.tt_typ in
+					Hashtbl.add sampler_map name v;
+					v
+				)
+		| TopDef.VFragment _ | TopDef.VVertex _ -> RVValue value
+		| TopDef.VPair _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VPair.";
+			RVValue value
+		| TopDef.VFunc(closure, pat, body) ->
+			RVFunc(StrMap.map (regval_of_value code) closure, pat, body)
 		end
-	| TopDef.VConst(name, typ) ->
-		let const_map = if vertex then v_const_map else f_const_map in
-		{ rv_pos  = value.TopDef.v_pos
-		; rv_kind = RVReg (
-			try
-				Hashtbl.find const_map name
-			with
-			| Not_found ->
-				let v = create_var_ast VSConstant typ.MlslAst.tt_typ in
-				Hashtbl.add const_map name v;
-				v
-			)
-		}
-	| TopDef.VSampler(name, typ) ->
-		{ rv_pos = value.TopDef.v_pos
-		; rv_kind = RVSampler (
-			try
-				Hashtbl.find sampler_map name
-			with
-			| Not_found ->
-				let v = create_sampler_ast name typ.MlslAst.tt_typ in
-				Hashtbl.add sampler_map name v;
-				v
-			)
-		}
-	| TopDef.VFragment _ | TopDef.VVertex _ -> 
-		{ rv_pos = value.TopDef.v_pos; rv_kind = RVValue value }
-	| TopDef.VPair _ ->
-		Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VPair.";
-		{ rv_pos = value.TopDef.v_pos; rv_kind = RVValue value }
+	}
 
 let unfold_code_var vertex code gamma expr x =
 	if StrMap.mem x gamma then begin 
@@ -497,7 +514,7 @@ let unfold_code_var vertex code gamma expr x =
 			let rv = StrMap.find x gamma in
 			match rv.rv_kind with
 			| RVShDepValue value ->
-				shader_dependent_value expr.MlslAst.e_pos vertex value
+				shader_dependent_value expr.MlslAst.e_pos code vertex value
 			| _ -> rv
 		with
 		| Not_found ->
@@ -508,7 +525,7 @@ let unfold_code_var vertex code gamma expr x =
 		Errors.error_p expr.MlslAst.e_pos "Internal error!!!";
 		raise Misc.InternalError
 	| Some value ->
-		shader_dependent_value expr.MlslAst.e_pos vertex value
+		shader_dependent_value expr.MlslAst.e_pos code vertex value
 	end
 
 let rec unfold_code vertex code gamma expr =
@@ -617,6 +634,8 @@ let rec unfold_code vertex code gamma expr =
 					typ_and_ins_of_cross expr.MlslAst.e_pos r1.var_typ r2.var_typ
 				| MlslAst.BOPow ->
 					typ_and_ins_of_pow expr.MlslAst.e_pos r1.var_typ r2.var_typ
+				| MlslAst.BOMin ->
+					typ_and_ins_of_min expr.MlslAst.e_pos r1.var_typ r2.var_typ
 			in
 			let rreg = create_variable VSTemporary rtp in
 			Misc.ImpList.add code (create_instr (ins rreg r1 r2));

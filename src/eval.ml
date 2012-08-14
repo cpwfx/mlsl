@@ -44,9 +44,8 @@ let rec eval gamma expr =
 	| MlslAst.EUnOp _ ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: eval EUnOp.";
 		raise Eval_exception
-	| MlslAst.EAbs _ ->
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: eval EAbs.";
-		raise Eval_exception
+	| MlslAst.EAbs(pat, body) ->
+		TopDef.make_value expr.MlslAst.e_pos (TopDef.VFunc(gamma, pat, body))
 	| MlslAst.EApp _ ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: eval EApp.";
 		raise Eval_exception

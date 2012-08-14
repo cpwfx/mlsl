@@ -2,6 +2,9 @@
 let check_types = false
 
 let _ =
+	Builtin.init()
+
+let _ =
 	if Array.length Sys.argv <= 1 then
 		print_endline "Usage: mlsl <file>"
 	else begin

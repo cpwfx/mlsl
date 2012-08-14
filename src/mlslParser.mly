@@ -60,7 +60,7 @@ typ_atom:
 
 typ_term:
 	typ {
-			{ MlslAst.tt_pos = Parsing.rhs_start_pos 1
+			{ MlslAst.tt_pos = Errors.UserPos(Parsing.rhs_start_pos 1)
 			; MlslAst.tt_typ = $1
 			}
 		}
@@ -166,7 +166,7 @@ record_values_rev:
 
 record_field_value:
 	ID EQ expr_nosemi {
-			{ MlslAst.rfv_pos   = Parsing.rhs_start_pos 1
+			{ MlslAst.rfv_pos   = Errors.UserPos(Parsing.rhs_start_pos 1)
 			; MlslAst.rfv_name  = $1
 			; MlslAst.rfv_value = $3
 			}
@@ -195,25 +195,25 @@ topdef:
 	  KW_ATTR ID ID COLON typ_term {
 			let asem =
 				{ MlslAst.asem_name = $2
-				; MlslAst.asem_pos  = Parsing.rhs_start_pos 2
+				; MlslAst.asem_pos  = Errors.UserPos(Parsing.rhs_start_pos 2)
 				} in
-			{ MlslAst.td_pos  = Parsing.rhs_start_pos 3
+			{ MlslAst.td_pos  = Errors.UserPos(Parsing.rhs_start_pos 3)
 			; MlslAst.td_kind = MlslAst.TDAttrDecl($3, asem, $5)
 			}
 		}
 	| KW_CONST ID COLON typ_term { 
-			{ MlslAst.td_pos  = Parsing.rhs_start_pos 2
+			{ MlslAst.td_pos  = Errors.UserPos(Parsing.rhs_start_pos 2)
 			; MlslAst.td_kind = MlslAst.TDConstDecl($2, $4)
 			}
 		}
 	| KW_LET pattern EQ expr {
-			{ MlslAst.td_pos  = Parsing.rhs_start_pos 2
+			{ MlslAst.td_pos  = Errors.UserPos(Parsing.rhs_start_pos 2)
 			; MlslAst.td_kind = MlslAst.TDLocalDef($2, $4)
 			}
 		}
 	| KW_LET ID pattern_atom pattern_atom_list_rev EQ expr {
 			let pos = Parsing.rhs_start_pos 2 in
-			{ MlslAst.td_pos  = pos
+			{ MlslAst.td_pos  = Errors.UserPos pos
 			; MlslAst.td_kind = MlslAst.TDLocalDef
 				( MlslAst.make_pattern pos (MlslAst.PVar $2)
 				, MlslAst.make_expr pos (MlslAst.EAbs($3, 
@@ -223,7 +223,7 @@ topdef:
 		}
 	| KW_LET KW_FRAGMENT ID pattern_atom_list_rev EQ expr {
 			let pos = Parsing.rhs_start_pos 2 in
-			{ MlslAst.td_pos  = Parsing.rhs_start_pos 3
+			{ MlslAst.td_pos  = Errors.UserPos(Parsing.rhs_start_pos 3)
 			; MlslAst.td_kind = MlslAst.TDLocalDef
 				( MlslAst.make_pattern pos (MlslAst.PVar $3)
 				, MlslAst.make_abs_rev pos $4 (MlslAst.make_expr pos 
@@ -233,7 +233,7 @@ topdef:
 		}
 	| KW_LET KW_VERTEX ID pattern_atom_list_rev EQ expr {
 			let pos = Parsing.rhs_start_pos 2 in
-			{ MlslAst.td_pos  = Parsing.rhs_start_pos 3
+			{ MlslAst.td_pos  = Errors.UserPos(Parsing.rhs_start_pos 3)
 			; MlslAst.td_kind = MlslAst.TDLocalDef
 				( MlslAst.make_pattern pos (MlslAst.PVar $3)
 				, MlslAst.make_abs_rev pos $4 (MlslAst.make_expr pos 
@@ -242,12 +242,12 @@ topdef:
 			}
 		}
 	| KW_LET KW_SHADER ID EQ expr {
-			{ MlslAst.td_pos  = Parsing.rhs_start_pos 3
+			{ MlslAst.td_pos  = Errors.UserPos(Parsing.rhs_start_pos 3)
 			; MlslAst.td_kind = MlslAst.TDShader($3, $5)
 			}
 		}
 	| KW_SAMPLER ID COLON typ_term {
-			{ MlslAst.td_pos = Parsing.rhs_start_pos 2
+			{ MlslAst.td_pos = Errors.UserPos(Parsing.rhs_start_pos 2)
 			; MlslAst.td_kind = MlslAst.TDSamplerDecl($2, $4)
 			}
 		}

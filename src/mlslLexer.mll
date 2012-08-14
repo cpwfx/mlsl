@@ -96,7 +96,7 @@ and block_comment depth = parse
 		}
 	| '\n' { Lexing.new_line lexbuf; block_comment depth lexbuf }
 	| eof  {
-			Errors.warning_p (lexbuf.Lexing.lex_curr_p) 
+			Errors.warning_p (Errors.UserPos lexbuf.Lexing.lex_curr_p) 
 				"End of file inside block comment ('*)' expected).";
 			MlslParser.EOF 
 		}

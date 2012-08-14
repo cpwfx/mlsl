@@ -1,7 +1,9 @@
 (* File: topDef.ml *)
 
+module StrMap = Map.Make(String)
+
 type value =
-	{ v_pos  : Lexing.position
+	{ v_pos  : Errors.position
 	; v_kind : value_kind
 	}
 and value_kind =
@@ -11,7 +13,10 @@ and value_kind =
 | VFragment of closure * MlslAst.expr
 | VVertex   of closure * MlslAst.expr
 | VPair     of value * value
+| VFunc     of closure * MlslAst.pattern * MlslAst.expr
 and closure = value Map.Make(String).t
+
+let empty_context = StrMap.empty
 
 let make_value pos kind =
 	{ v_pos  = pos
