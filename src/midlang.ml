@@ -32,8 +32,8 @@ let dim_of_ast d =
 type typ =
 | TFloat
 | TInt
-| TMat of dim * dim
-| TVec of dim
+| TMat  of dim * dim
+| TVec  of dim
 
 type variable_sort =
 | VSAttribute
@@ -726,6 +726,10 @@ let rec unfold_code vertex code gamma expr =
 		let rv1   = unfold_code vertex code gamma e1 in
 		let gamma = bind_pattern code gamma pat rv1  in
 			unfold_code vertex code gamma e2
+	| MlslAst.EIf(cnd, e1, e2) ->
+		Errors.error_p expr.MlslAst.e_pos
+			"Unimplemented: unfold_code EIf";
+		raise Unfold_exception
 	| MlslAst.EFragment _ | MlslAst.EVertex _ ->
 		Errors.error_p expr.MlslAst.e_pos
 			"Can not unfold shader inside shader.";

@@ -100,6 +100,9 @@ let rec infer_type gamma worlds expr =
 	| MlslAst.ELet(pat, e1, e2) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type ELet.";
 		[]
+	| MlslAst.EIf(e1, e2, e3) ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EIf.";
+		[]
 	| MlslAst.EFragment e ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EFragment.";
 		[]
@@ -151,6 +154,10 @@ let rec fast_check_code gamma expr =
 	| MlslAst.ELet(pat, e1, e2) ->
 		fast_check_code gamma e1;
 		fast_check_code (fast_check_pattern gamma pat) e2
+	| MlslAst.EIf(e1, e2, e3) ->
+		fast_check_code gamma e1;
+		fast_check_code gamma e2;
+		fast_check_code gamma e3
 	| MlslAst.EFragment e ->
 		fast_check_code gamma e
 	| MlslAst.EVertex e ->

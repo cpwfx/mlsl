@@ -157,6 +157,7 @@ and expr_kind =
 | EAbs      of pattern * expr
 | EApp      of expr * expr
 | ELet      of pattern * expr * expr
+| EIf       of expr * expr * expr
 | EFragment of expr
 | EVertex   of expr
 and record_field_value =

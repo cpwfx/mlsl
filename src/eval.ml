@@ -52,6 +52,9 @@ let rec eval gamma expr =
 	| MlslAst.ELet _ ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: eval ELet.";
 		raise Eval_exception
+	| MlslAst.EIf _ ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: eval EIf.";
+		raise Eval_exception
 	| MlslAst.EFragment e ->
 		TopDef.make_value expr.MlslAst.e_pos (TopDef.VFragment(gamma, e))
 	| MlslAst.EVertex e ->

@@ -5,12 +5,14 @@
 %token BR_OPN BR_CLS CBR_OPN CBR_CLS
 %token AMPER ARROW COLON COMMA DIV DOT EQ HAT MINUS MOD MUL PLUS POW SEMI
 %token ANY
-%token KW_ATTR KW_BOOL KW_CONST KW_FLOAT KW_FRAGMENT KW_FUN KW_IN KW_INT 
-%token KW_LET KW_MAT22 KW_MAT23 KW_MAT24 KW_MAT32 KW_MAT33 KW_MAT34 KW_MAT42 
-%token KW_MAT43 KW_MAT44 KW_SAMPLER KW_SAMPLER2D KW_SAMPLERCUBE KW_SHADER 
-%token KW_UNIT KW_VEC2 KW_VEC3 KW_VEC4 KW_VERTEX
+%token KW_ATTR KW_BOOL KW_CONST KW_ELSE KW_FLOAT KW_FRAGMENT KW_FUN KW_IF 
+%token KW_IN KW_INT KW_LET KW_MAT22 KW_MAT23 KW_MAT24 KW_MAT32 KW_MAT33 
+%token KW_MAT34 KW_MAT42 KW_MAT43 KW_MAT44 KW_SAMPLER KW_SAMPLER2D 
+%token KW_SAMPLERCUBE KW_SHADER KW_THEN KW_UNIT KW_VEC2 KW_VEC3 KW_VEC4 
+%token KW_VERTEX
 
 %right ARROW
+%left  STMT
 %left  COMMA
 %left  MINUS PLUS
 %left  AMPER DIV HAT MOD MUL
@@ -67,10 +69,10 @@ typ_term:
 ;
 
 expr:
-	  KW_LET pattern EQ expr KW_IN expr {
+	  KW_LET pattern EQ expr KW_IN expr %prec STMT {
 			MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.ELet($2, $4, $6))
 		}
-	| KW_LET ID pattern_atom pattern_atom_list_rev EQ expr KW_IN expr {
+	| KW_LET ID pattern_atom pattern_atom_list_rev EQ expr KW_IN expr %prec STMT {
 			let pos1 = Parsing.rhs_start_pos 1 in
 			let pos2 = Parsing.rhs_start_pos 2 in
 			MlslAst.make_expr pos1 (MlslAst.ELet
@@ -79,54 +81,53 @@ expr:
 				, $8
 				))
 		}
-	| KW_FUN pattern_atom pattern_atom_list_rev ARROW expr {
+	| KW_FUN pattern_atom pattern_atom_list_rev ARROW expr %prec STMT {
 			let pos = Parsing.rhs_start_pos 1 in
 			MlslAst.make_expr pos (MlslAst.EAbs($2, MlslAst.make_abs_rev pos $3 $5))
 		}
-	| expr_nosemi { $1 }
-;
-
-expr_nosemi:
-	  expr_nosemi COMMA expr_nosemi {
+	| KW_IF expr KW_THEN expr KW_ELSE expr %prec STMT {
+			MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EIf($2, $4, $6))
+		}
+	| expr COMMA expr {
 			MlslAst.make_expr (Parsing.rhs_start_pos 2) (MlslAst.EPair($1, $3))
 		}
-	| expr_nosemi MINUS expr_nosemi {
+	| expr MINUS expr {
 			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
 				(MlslAst.EBinOp(MlslAst.BOSub, $1, $3))
 		}
-	| expr_nosemi PLUS expr_nosemi {
+	| expr PLUS expr {
 			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
 				(MlslAst.EBinOp(MlslAst.BOAdd, $1, $3))
 		}
-	| expr_nosemi AMPER expr_nosemi {
+	| expr AMPER expr {
 			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
 				(MlslAst.EBinOp(MlslAst.BODot, $1, $3))
 		}
-	| expr_nosemi DIV expr_nosemi {
+	| expr DIV expr {
 			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
 				(MlslAst.EBinOp(MlslAst.BODiv, $1, $3))
 		}
-	| expr_nosemi HAT expr_nosemi {
+	| expr HAT expr {
 			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
 				(MlslAst.EBinOp(MlslAst.BOCross, $1, $3))
 		}
-	| expr_nosemi MOD expr_nosemi {
+	| expr MOD expr {
 			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
 				(MlslAst.EBinOp(MlslAst.BOMod, $1, $3))
 		}
-	| expr_nosemi MUL expr_nosemi {
+	| expr MUL expr {
 			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
 				(MlslAst.EBinOp(MlslAst.BOMul, $1, $3))
 		}
-	| MINUS expr_nosemi %prec UMINUS {
+	| MINUS expr %prec UMINUS {
 			MlslAst.make_expr (Parsing.rhs_start_pos 1) 
 				(MlslAst.EUnOp(MlslAst.UONeg, $2))
 		}
-	| PLUS expr_nosemi %prec UPLUS {
+	| PLUS expr %prec UPLUS {
 			MlslAst.make_expr (Parsing.rhs_start_pos 1) 
 				(MlslAst.EUnOp(MlslAst.UOPlus, $2))
 		}
-	| expr_nosemi POW expr_nosemi {
+	| expr POW expr {
 			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
 				(MlslAst.EBinOp(MlslAst.BOPow, $1, $3))
 		}
@@ -165,7 +166,7 @@ record_values_rev:
 ;
 
 record_field_value:
-	ID EQ expr_nosemi {
+	ID EQ expr {
 			{ MlslAst.rfv_pos   = Errors.UserPos(Parsing.rhs_start_pos 1)
 			; MlslAst.rfv_name  = $1
 			; MlslAst.rfv_value = $3
