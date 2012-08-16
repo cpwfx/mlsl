@@ -129,4 +129,8 @@ val optimize : shader -> shader
 
 val finalize : shader -> shader option
 
-val write : shader -> unit -> unit
+val write     : shader -> unit -> unit
+val write_asm : shader -> unit -> unit
+
+val do_all     : Midlang.shader -> unit
+val do_all_asm : Midlang.shader -> unit

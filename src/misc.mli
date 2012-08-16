@@ -15,11 +15,12 @@ end
 
 module ImpList : sig
 	type 'a t
-	val add : 'a t -> 'a -> unit
-	val create : unit -> 'a t
-	val iter   : ('a -> unit) -> 'a t -> unit
-	val of_list : 'a list -> 'a t
-	val to_list : 'a t -> 'a list
+	val add      : 'a t -> 'a -> unit
+	val create   : unit -> 'a t
+	val is_empty : 'a t -> bool
+	val iter     : ('a -> unit) -> 'a t -> unit
+	val of_list  : 'a list -> 'a t
+	val to_list  : 'a t -> 'a list
 end
 
 module IO : sig

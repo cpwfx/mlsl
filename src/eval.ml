@@ -4,6 +4,11 @@ module StrMap = Map.Make(String)
 
 exception Eval_exception
 
+let target_func = ref (fun _ -> ())
+
+let set_target_func f =
+	target_func := f
+
 let rec eval gamma expr =
 	match expr.MlslAst.e_kind with
 	| MlslAst.EVar x ->
@@ -87,11 +92,8 @@ let eval_topdef td =
 			TopDef.add name value;
 			Misc.Opt.iter (Midlang.unfold_shader name value) (fun mprog ->
 			let mprog_opt = Midlang.optimize mprog in
-			Misc.Opt.iter (Agal.build mprog_opt) (fun aprog ->
-			let aprog_opt = Agal.optimize aprog in
-			Misc.Opt.iter (Agal.finalize aprog_opt) (fun aprog_fin ->
-			Final.add_action (Agal.write aprog_fin)
-			)))
+			!target_func mprog_opt
+			)
 		with
 		| Eval_exception -> ()
 		end

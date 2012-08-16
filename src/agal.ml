@@ -1144,12 +1144,35 @@ let write_program vertex path code =
 		write_bytecode out code
 	)
 
-let write sh () =
+let write_program_asm vertex path code =
+	Errors.error "Unimplemented: write_program_asm"
+
+let write_json sh =
 	Json.write (sh.sh_name ^ ".json") (Json.create_obj
 		[ "attr",   create_attr_json sh.sh_glob.shg_attr
 		; "vconst", create_const_json sh.sh_glob.shg_v_const
 		; "fconst", create_const_json sh.sh_glob.shg_f_const
 		; "sampler", create_sampler_json sh.sh_glob.shg_samplers
-		]);
+		])
+
+let write sh () =
+	write_json sh;
 	write_program true  (sh.sh_name ^ ".vs") sh.sh_vertex;
 	write_program false (sh.sh_name ^ ".fs") sh.sh_fragment
+
+let write_asm sh () =
+	write_json sh;
+	write_program_asm true  (sh.sh_name ^ "_vs.agal") sh.sh_vertex;
+	write_program_asm false (sh.sh_name ^ "_fs.agal") sh.sh_fragment
+
+let do_all shader =
+	Misc.Opt.iter (build shader) (fun aprog ->
+	let aprog_opt = optimize aprog in
+	Misc.Opt.iter (finalize aprog_opt) (fun aprog_fin ->
+	Final.add_action (write aprog_fin)))
+
+let do_all_asm shader =
+	Misc.Opt.iter (build shader) (fun aprog ->
+	let aprog_opt = optimize aprog in
+	Misc.Opt.iter (finalize aprog_opt) (fun aprog_fin ->
+	Final.add_action (write_asm aprog_fin)))
