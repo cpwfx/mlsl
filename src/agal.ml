@@ -1135,6 +1135,136 @@ let rec write_bytecode out code =
 		end;
 		write_bytecode out code
 
+let register_name vertex sort row =
+	match sort with
+	| VSAttribute -> "va" ^ string_of_int row
+	| VSConstant  -> (if vertex then "vc" else "fc") ^ string_of_int row
+	| VSTemporary -> (if vertex then "vt" else "ft") ^ string_of_int row
+	| VSOutput    -> (if vertex then "op" else "oc")
+	| VSVarying   -> "v" ^ string_of_int row
+
+let write_dest_asm vertex dst =
+	let reg_name =
+		register_name vertex dst.dst_var.var_sort
+			(dst.dst_row + (fst (Misc.Opt.value dst.dst_var.var_reg))) in
+	let mask =
+		create_mask_bin dst.dst_mask (snd (Misc.Opt.value dst.dst_var.var_reg)) in
+	reg_name ^
+		(if mask = 15 then ""
+		else
+			"." ^
+			(if mask land 1 = 1 then "x" else "") ^
+			(if mask land 2 = 2 then "y" else "") ^
+			(if mask land 4 = 4 then "z" else "") ^
+			(if mask land 8 = 8 then "w" else "")
+		)
+
+let create_swizzle_asm swizzle fld_offset dest_offset =
+	let comp0 =
+		if dest_offset > 0 then 0 
+		else swizzle.(0 - dest_offset) + fld_offset in
+	let comp1 =
+		if dest_offset > 1 then 0 
+		else swizzle.(1 - dest_offset) + fld_offset in
+	let comp2 =
+		if dest_offset > 2 then 0 
+		else swizzle.(2 - dest_offset) + fld_offset in
+	let comp3 =
+		if dest_offset > 3 then 0 
+		else swizzle.(3 - dest_offset) + fld_offset in
+	let comp_to_str c =
+		match c with
+		| 0 -> "x"
+		| 1 -> "y"
+		| 2 -> "z"
+		| 3 -> "w"
+		| _ -> "#" in
+	"." ^ (comp_to_str comp0) ^ (comp_to_str comp1) ^
+	      (comp_to_str comp2) ^ (comp_to_str comp3)
+
+let write_source_asm vertex src dest_offset =
+	let reg_name =
+		register_name vertex src.src_var.var_sort
+			(src.src_row + (fst (Misc.Opt.value src.src_var.var_reg))) in
+	let offset =
+		begin match src.src_offset with
+		| None -> ""
+		| Some off ->
+			Errors.error "Unimplemented: write_source_asm with indirect offset.";
+			"[]"
+		end in
+	let swizzle =
+		create_swizzle_asm 
+			src.src_swizzle 
+			(snd (Misc.Opt.value src.src_var.var_reg)) 
+			dest_offset in
+	reg_name ^ offset ^ (if swizzle = ".xyzw" then "" else swizzle)
+
+let rec write_asm vertex out code =
+	match code with
+	| [] -> ()
+	| ins :: code ->
+		begin match ins.ins_kind with
+		| IMov(dst, src) -> Printf.fprintf out "mov %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		| IAdd(dst, src1, src2) -> Printf.fprintf out "add %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		| ISub(dst, src1, src2) -> Printf.fprintf out "sub %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		| IMul(dst, src1, src2) -> Printf.fprintf out "mul %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		| IDiv(dst, src1, src2) -> Printf.fprintf out "div %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		| IMin(dst, src1, src2) -> Printf.fprintf out "min %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		| IFrc(dst, src) -> Printf.fprintf out "frc %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		| IPow(dst, src1, src2) -> Printf.fprintf out "pow %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		| ICrs(dst, src1, src2) -> Printf.fprintf out "crs %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src1 0)
+			(write_source_asm vertex src2 0)
+		| IDp3(dst, src1, src2) -> Printf.fprintf out "dp3 %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src1 0)
+			(write_source_asm vertex src2 0)
+		| IDp4(dst, src1, src2) -> Printf.fprintf out "dp4 %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src1 0)
+			(write_source_asm vertex src2 0)
+		| INeg(dst, src) -> Printf.fprintf out "neg %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		| IM33(dst, src1, src2) -> Printf.fprintf out "m33 %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src1 0)
+			(write_source_asm vertex src2 0)
+		| IM44(dst, src1, src2) -> Printf.fprintf out "m44 %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src1 0)
+			(write_source_asm vertex src2 0)
+		| IM34(dst, src1, src2) -> Printf.fprintf out "m34 %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src1 0)
+			(write_source_asm vertex src2 0)
+		end;
+		write_asm vertex out code
+
 let write_program vertex path code =
 	Misc.IO.with_out_channel path true (fun out ->
 		LittleEndian.write_byte out 0xA0;                      (* magic        *)
@@ -1145,7 +1275,9 @@ let write_program vertex path code =
 	)
 
 let write_program_asm vertex path code =
-	Errors.error "Unimplemented: write_program_asm"
+	Misc.IO.with_out_channel path false (fun out ->
+		write_asm vertex out code
+	)
 
 let write_json sh =
 	Json.write (sh.sh_name ^ ".json") (Json.create_obj
