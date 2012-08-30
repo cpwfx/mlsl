@@ -1200,6 +1200,56 @@ let write_source_asm vertex src dest_offset =
 			dest_offset in
 	reg_name ^ offset ^ (if swizzle = ".xyzw" then "" else swizzle)
 
+let write_crs2_source_asm vertex src dst_field =
+	let real_src =
+		{ src with src_swizzle =
+			match dst_field with
+			| 0 ->
+				[| src.src_swizzle.(2)
+				;  src.src_swizzle.(0)
+				;  src.src_swizzle.(1)
+				;  src.src_swizzle.(3)
+				|]
+			| 1 ->
+				[| src.src_swizzle.(1)
+				;  src.src_swizzle.(2)
+				;  src.src_swizzle.(0)
+				;  src.src_swizzle.(3)
+				|]
+			| 2 -> src.src_swizzle
+			| _ -> raise Misc.InternalError
+		} in
+	write_source_asm vertex real_src 0
+
+let write_sampler_asm sampler =
+	let write_sampler_dim dim =
+		match dim with
+		| Midlang.SDim2D   -> "2d"
+		| Midlang.SDimCube -> "cube"
+	in
+	let write_sampler_filter filter =
+		match filter with
+		| SFltrNearest -> "nearest"
+		| SFltrLinear  -> "linear"
+	in
+	let write_sampler_mipmap mipmap =
+		match mipmap with
+		| SMipDisable -> "mipnone"
+		| SMipNearest -> "mipnearest"
+		| SMipLinear  -> "miplinear"
+	in
+	let write_sampler_wrapping wrapping =
+		match wrapping with
+		| SWrapClamp  -> "clamp"
+		| SWrapRepeat -> "repeat"
+	in
+	Printf.sprintf "fs%d<%s,%s,%s,%s>" 
+		(Misc.Opt.value         sampler.sam_index)
+		(write_sampler_dim      sampler.sam_dim)
+		(write_sampler_filter   sampler.sam_filter)
+		(write_sampler_mipmap   sampler.sam_mipmap)
+		(write_sampler_wrapping sampler.sam_wrapping)
+
 let rec write_asm vertex out code =
 	match code with
 	| [] -> ()
@@ -1262,6 +1312,14 @@ let rec write_asm vertex out code =
 			(write_dest_asm vertex dst)
 			(write_source_asm vertex src1 0)
 			(write_source_asm vertex src2 0)
+		| ITex(dst, src, sam) -> Printf.fprintf out "tex %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src 0)
+			(write_sampler_asm sam)
+		| ICrs2(dst, src1, src2) -> Printf.fprintf out "crs %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_crs2_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+			(write_crs2_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
 		end;
 		write_asm vertex out code
 
