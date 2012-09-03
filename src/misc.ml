@@ -2,6 +2,10 @@
 
 exception InternalError
 
+module Char = struct
+	let is_upper c = c >= 'A' && c <= 'Z'
+end
+
 module Fresh = struct
 	type t = int ref
 	let create () = ref 0

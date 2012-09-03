@@ -123,6 +123,11 @@ and pattern_kind =
 | PAny
 | PVar      of string
 | PTypedVar of string * typ_term
+| PTrue
+| PFalse
+| PPair     of pattern * pattern
+| PConstrU  of string
+| PConstrP  of string * pattern
 
 type binop =
 | BOAdd
@@ -148,6 +153,8 @@ and expr_kind =
 | EVar      of string
 | EVarying  of string
 | EInt      of int
+| ETrue
+| EFalse
 | ESwizzle  of expr * Swizzle.t
 | ERecord   of record_field_value list
 | ESelect   of expr * string
@@ -157,13 +164,22 @@ and expr_kind =
 | EAbs      of pattern * expr
 | EApp      of expr * expr
 | ELet      of pattern * expr * expr
+| EFix      of pattern * expr
 | EIf       of expr * expr * expr
+| EMatch    of expr * match_pattern list
 | EFragment of expr
 | EVertex   of expr
+| EConstrU  of string
+| EConstrP  of string * expr
 and record_field_value =
 	{ rfv_pos   : Errors.position
 	; rfv_name  : string
 	; rfv_value : expr
+	}
+and match_pattern =
+	{ mp_patterns  : pattern list
+	; mp_condition : expr option
+	; mp_action    : expr
 	}
 
 type attr_semantics =
@@ -205,6 +221,13 @@ let make_pattern pos kind =
 	; p_kind = kind
 	}
 
+let make_list_pattern_rev pos l =
+	let rec make_acc acc xs =
+		match xs with
+		| [] -> acc
+		| x :: xs -> make_acc (make_pattern pos (PConstrP("::", make_pattern pos (PPair(x, acc))))) xs
+	in make_acc (make_pattern pos (PConstrU "[]")) l
+
 let make_expr pos kind =
 	{ e_pos  = Errors.UserPos pos
 	; e_kind = kind
@@ -224,6 +247,31 @@ let make_select pos expr field =
 	match Swizzle.try_of_string field with
 	| None         -> make_expr pos (ESelect(expr, field))
 	| Some swizzle -> make_expr pos (ESwizzle(expr, swizzle))
+
+let rec split_let_rec_def pos defs =
+	match defs with
+	| [] -> (make_pattern pos (PConstrU "()"), make_expr pos (EConstrU "()"))
+	| [ (pat, expr) ] -> (pat, expr)
+	| (pat, expr) :: defs ->
+		let (pats, exprs) = split_let_rec_def pos defs in
+			(make_pattern pos (PPair(pat, pats)), make_expr pos (EPair(expr, exprs)))
+
+let make_let_rec pos defs expr =
+	let (pat, e1) = split_let_rec_def pos defs in
+	make_expr pos (ELet(pat, make_expr pos (EFix(pat, e1)), expr))
+
+let make_list_rev pos l =
+	let rec make_acc acc xs =
+		match xs with
+		| [] -> acc
+		| x :: xs -> make_acc (make_expr pos (EConstrP("::", make_expr pos (EPair(x, acc))))) xs
+	in make_acc (make_expr pos (EConstrU "[]")) l
+
+let make_topdef_let_rec pos defs =
+	let (pat, e1) = split_let_rec_def pos defs in
+	{ td_pos  = Errors.UserPos pos
+	; td_kind = TDLocalDef(pat, e1)
+	}
 
 let is_reg_type tp =
 	match tp with

@@ -2,6 +2,10 @@
 
 exception InternalError
 
+module Char : sig
+	val is_upper : char -> bool
+end
+
 module Fresh : sig
 	type t
 	val create : unit -> t

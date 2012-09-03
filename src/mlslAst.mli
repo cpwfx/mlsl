@@ -61,6 +61,11 @@ and pattern_kind =
 | PAny
 | PVar      of string
 | PTypedVar of string * typ_term
+| PTrue
+| PFalse
+| PPair     of pattern * pattern
+| PConstrU  of string
+| PConstrP  of string * pattern
 
 type binop =
 | BOAdd
@@ -86,6 +91,8 @@ and expr_kind =
 | EVar      of string
 | EVarying  of string
 | EInt      of int
+| ETrue
+| EFalse
 | ESwizzle  of expr * Swizzle.t
 | ERecord   of record_field_value list
 | ESelect   of expr * string
@@ -95,14 +102,24 @@ and expr_kind =
 | EAbs      of pattern * expr
 | EApp      of expr * expr
 | ELet      of pattern * expr * expr
+| EFix      of pattern * expr
 | EIf       of expr * expr * expr
+| EMatch    of expr * match_pattern list
 | EFragment of expr
 | EVertex   of expr
+| EConstrU  of string
+| EConstrP  of string * expr
 and record_field_value =
 	{ rfv_pos   : Errors.position
 	; rfv_name  : string
 	; rfv_value : expr
 	}
+and match_pattern =
+	{ mp_patterns  : pattern list
+	; mp_condition : expr option
+	; mp_action    : expr
+	}
+
 
 type attr_semantics =
 	{ asem_name : string
@@ -134,12 +151,17 @@ type topdef =
 
 val int_of_dim : dim -> int
 
-val make_pattern : Lexing.position -> pattern_kind -> pattern
+val make_pattern          : Lexing.position -> pattern_kind -> pattern
+val make_list_pattern_rev : Lexing.position -> pattern list -> pattern
 
-val make_expr    : Lexing.position -> expr_kind -> expr
-val make_abs_rev : Lexing.position -> pattern list -> expr -> expr
-val make_app     : expr -> expr list -> expr
-val make_select  : Lexing.position -> expr -> string -> expr
+val make_expr     : Lexing.position -> expr_kind -> expr
+val make_abs_rev  : Lexing.position -> pattern list -> expr -> expr
+val make_app      : expr -> expr list -> expr
+val make_select   : Lexing.position -> expr -> string -> expr
+val make_let_rec  : Lexing.position -> (pattern * expr) list -> expr -> expr
+val make_list_rev : Lexing.position -> expr list -> expr
+
+val make_topdef_let_rec : Lexing.position -> (pattern * expr) list -> topdef
 
 val is_reg_type     : typ -> bool
 val is_data_type    : typ -> bool

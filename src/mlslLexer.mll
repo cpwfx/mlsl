@@ -4,10 +4,15 @@
 let kw_map = Hashtbl.create 32
 let _ =
 	Hashtbl.add kw_map "_"           MlslParser.ANY;
+	Hashtbl.add kw_map "and"         MlslParser.KW_AND;
 	Hashtbl.add kw_map "attr"        MlslParser.KW_ATTR;
+	Hashtbl.add kw_map "begin"       MlslParser.KW_BEGIN;
 	Hashtbl.add kw_map "bool"        MlslParser.KW_BOOL;
 	Hashtbl.add kw_map "const"       MlslParser.KW_CONST;
 	Hashtbl.add kw_map "else"        MlslParser.KW_ELSE;
+	Hashtbl.add kw_map "end"         MlslParser.KW_END;
+	Hashtbl.add kw_map "false"       MlslParser.KW_FALSE;
+	Hashtbl.add kw_map "fix"         MlslParser.KW_FIX;
 	Hashtbl.add kw_map "float"       MlslParser.KW_FLOAT;
 	Hashtbl.add kw_map "fragment"    MlslParser.KW_FRAGMENT;
 	Hashtbl.add kw_map "fun"         MlslParser.KW_FUN;
@@ -24,16 +29,21 @@ let _ =
 	Hashtbl.add kw_map "mat42"       MlslParser.KW_MAT42;
 	Hashtbl.add kw_map "mat43"       MlslParser.KW_MAT43;
 	Hashtbl.add kw_map "mat44"       MlslParser.KW_MAT44;
+	Hashtbl.add kw_map "match"       MlslParser.KW_MATCH;
+	Hashtbl.add kw_map "rec"         MlslParser.KW_REC;
 	Hashtbl.add kw_map "sampler"     MlslParser.KW_SAMPLER;
 	Hashtbl.add kw_map "sampler2D"   MlslParser.KW_SAMPLER2D;
 	Hashtbl.add kw_map "samplerCube" MlslParser.KW_SAMPLERCUBE;
 	Hashtbl.add kw_map "shader"      MlslParser.KW_SHADER;
 	Hashtbl.add kw_map "then"        MlslParser.KW_THEN;
+	Hashtbl.add kw_map "true"        MlslParser.KW_TRUE;
 	Hashtbl.add kw_map "unit"        MlslParser.KW_UNIT;
 	Hashtbl.add kw_map "vec2"        MlslParser.KW_VEC2;
 	Hashtbl.add kw_map "vec3"        MlslParser.KW_VEC3;
 	Hashtbl.add kw_map "vec4"        MlslParser.KW_VEC4;
 	Hashtbl.add kw_map "vertex"      MlslParser.KW_VERTEX;
+	Hashtbl.add kw_map "with"        MlslParser.KW_WITH;
+	Hashtbl.add kw_map "when"        MlslParser.KW_WHEN;
 	()
 
 let op_map = Hashtbl.create 32
@@ -49,6 +59,7 @@ let _ =
 	Hashtbl.add op_map "-"  MlslParser.MINUS;
 	Hashtbl.add op_map "%"  MlslParser.MOD;
 	Hashtbl.add op_map "*"  MlslParser.MUL;
+	Hashtbl.add op_map "|"  MlslParser.PIPE;
 	Hashtbl.add op_map "+"  MlslParser.PLUS;
 	Hashtbl.add op_map "**" MlslParser.POW;
 	Hashtbl.add op_map ";"  MlslParser.SEMI;
@@ -66,15 +77,22 @@ rule token = parse
 	| '\n' { Lexing.new_line lexbuf; token lexbuf }
 	| "//" { line_comment lexbuf }
 	| "(*" { block_comment 1 lexbuf }
+	| "()" { MlslParser.UNIT    }
 	| '('  { MlslParser.BR_OPN  }
 	| ')'  { MlslParser.BR_CLS  }
+	| '['  { MlslParser.SBR_OPN }
+	| ']'  { MlslParser.SBR_CLS }
 	| '{'  { MlslParser.CBR_OPN }
 	| '}'  { MlslParser.CBR_CLS }
 	| var_start var_char* as x {
 			try
 				Hashtbl.find kw_map x
 			with
-			| Not_found -> MlslParser.ID x
+			| Not_found ->
+				if Misc.Char.is_upper x.[0] then 
+					MlslParser.CONSTR x
+				else 
+					MlslParser.ID x
 		}
 	| '$' (var_start var_char* as x) { MlslParser.VARYING x }
 	| op_char+ as x {
