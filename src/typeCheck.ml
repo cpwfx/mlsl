@@ -18,9 +18,14 @@ module Globals = struct
 
 	let rec declare_pattern pat =
 		match pat.MlslAst.p_kind with
-		| MlslAst.PAny   -> ()
+		| MlslAst.PAny | MlslAst.PTrue | MlslAst.PFalse | MlslAst.PConstrU _ -> ()
 		| MlslAst.PVar x | MlslAst.PTypedVar(x, _) ->
 			add x [] pat.MlslAst.p_pos
+		| MlslAst.PPair(pat1, pat2) ->
+			declare_pattern pat1;
+			declare_pattern pat2
+		| MlslAst.PConstrP(_, pat) ->
+			declare_pattern pat
 
 	let check_name name =
 		try
@@ -63,6 +68,12 @@ let rec infer_type gamma worlds expr =
 	| MlslAst.EInt n ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EInt.";
 		[]
+	| MlslAst.ETrue ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type ETrue.";
+		[]
+	| MlslAst.EFalse ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EFalse.";
+		[]
 	| MlslAst.ESwizzle(v1, swizzle) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type ESwizzle.";
 		[]
@@ -100,8 +111,14 @@ let rec infer_type gamma worlds expr =
 	| MlslAst.ELet(pat, e1, e2) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type ELet.";
 		[]
+	| MlslAst.EFix(pat, e1) ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EFix.";
+		[]
 	| MlslAst.EIf(e1, e2, e3) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EIf.";
+		[]
+	| MlslAst.EMatch(e1, mp) ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EMatch.";
 		[]
 	| MlslAst.EFragment e ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EFragment.";
@@ -109,14 +126,36 @@ let rec infer_type gamma worlds expr =
 	| MlslAst.EVertex e ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EVertex.";
 		[]
+	| MlslAst.EConstrU name ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EConstrU.";
+		[]
+	| MlslAst.EConstrP(name, e) ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EConstrP.";
+		[]
 	end
 
 (* ========================================================================= *)
+
+let rec pattern_variables pat =
+	match pat.MlslAst.p_kind with
+	| MlslAst.PAny -> StrSet.empty
+	| MlslAst.PVar x | MlslAst.PTypedVar(x, _) -> StrSet.singleton x
+	| MlslAst.PTrue | MlslAst.PFalse -> StrSet.empty
+	| MlslAst.PPair(pat1, pat2) -> 
+		StrSet.union (pattern_variables pat1) (pattern_variables pat2)
+	| MlslAst.PConstrU _ -> StrSet.empty
+	| MlslAst.PConstrP(_, pat) -> pattern_variables pat
 
 let rec fast_check_pattern gamma pat =
 	match pat.MlslAst.p_kind with
 	| MlslAst.PAny -> gamma
 	| MlslAst.PVar x | MlslAst.PTypedVar(x, _) -> StrSet.add x gamma
+	| MlslAst.PTrue  | MlslAst.PFalse -> gamma
+	| MlslAst.PPair(pat1, pat2) ->
+		let gamma' = fast_check_pattern gamma pat1 in
+		fast_check_pattern gamma' pat2
+	| MlslAst.PConstrU _ -> gamma
+	| MlslAst.PConstrP(_, pat) -> fast_check_pattern gamma pat
 
 let rec fast_check_code gamma expr =
 	match expr.MlslAst.e_kind with
@@ -129,8 +168,9 @@ let rec fast_check_code gamma expr =
 		| Some _ -> ()
 		end
 	| MlslAst.EVarying x -> ()
-	| MlslAst.EInt n ->
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: fast_check_code EInt."
+	| MlslAst.EInt n -> ()
+	| MlslAst.ETrue  -> ()
+	| MlslAst.EFalse -> ()
 	| MlslAst.ESwizzle(v, _) ->
 		fast_check_code gamma v
 	| MlslAst.ERecord rd ->
@@ -154,14 +194,38 @@ let rec fast_check_code gamma expr =
 	| MlslAst.ELet(pat, e1, e2) ->
 		fast_check_code gamma e1;
 		fast_check_code (fast_check_pattern gamma pat) e2
+	| MlslAst.EFix(pat, e) ->
+		fast_check_code (fast_check_pattern gamma pat) e
 	| MlslAst.EIf(e1, e2, e3) ->
 		fast_check_code gamma e1;
 		fast_check_code gamma e2;
 		fast_check_code gamma e3
+	| MlslAst.EMatch(e, mps) ->
+		fast_check_code gamma e;
+		List.iter (fast_check_match_pattern gamma) mps
 	| MlslAst.EFragment e ->
 		fast_check_code gamma e
 	| MlslAst.EVertex e ->
 		fast_check_code gamma e
+	| MlslAst.EConstrU _ -> ()
+	| MlslAst.EConstrP(_, e) ->
+		fast_check_code gamma e
+
+and fast_check_match_pattern gamma mp =
+	let gamma' =
+		match mp.MlslAst.mp_patterns with
+		| []          -> gamma
+		| pat :: pats ->
+			let new_vars = pattern_variables pat in
+			List.iter (fun p ->
+					if not (StrSet.equal new_vars (pattern_variables p)) then
+						Errors.error_p p.MlslAst.p_pos "This patterns define different variables."
+					else ()
+				) pats;
+			fast_check_pattern gamma pat
+	in
+	Misc.Opt.iter mp.MlslAst.mp_condition (fast_check_code gamma');
+	fast_check_code gamma' mp.MlslAst.mp_action
 
 (* ========================================================================= *)
 

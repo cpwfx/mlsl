@@ -120,7 +120,6 @@ and match_pattern =
 	; mp_action    : expr
 	}
 
-
 type attr_semantics =
 	{ asem_name : string
 	; asem_pos  : Errors.position
