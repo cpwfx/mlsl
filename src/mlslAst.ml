@@ -1,5 +1,7 @@
 (* File: mlslAst.ml *)
 
+open Misc.Dim
+
 module Swizzle = struct
 	exception Not_swizzle
 
@@ -88,11 +90,6 @@ module Swizzle = struct
 				(max (component_id c1) (component_id c2))
 				(max (component_id c3) (component_id c4))
 end
-
-type dim =
-| Dim2
-| Dim3
-| Dim4
 
 type typ =
 | TBool
@@ -210,12 +207,6 @@ type topdef =
 	; td_kind : topdef_kind
 	}
 
-let int_of_dim d =
-	match d with
-	| Dim2 -> 2
-	| Dim3 -> 3
-	| Dim4 -> 4
-
 let make_pattern pos kind =
 	{ p_pos  = Errors.UserPos pos
 	; p_kind = kind
@@ -270,7 +261,7 @@ let make_list_rev pos l =
 let make_topdef_let_rec pos defs =
 	let (pat, e1) = split_let_rec_def pos defs in
 	{ td_pos  = Errors.UserPos pos
-	; td_kind = TDLocalDef(pat, e1)
+	; td_kind = TDLocalDef(pat, make_expr pos (EFix(pat, e1)))
 	}
 
 let is_reg_type tp =

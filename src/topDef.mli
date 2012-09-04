@@ -10,9 +10,20 @@ and value_kind =
 | VSampler  of string  * MlslAst.typ_term
 | VFragment of closure * MlslAst.expr
 | VVertex   of closure * MlslAst.expr
+| VBool     of bool
+| VInt      of int
+| VFloat    of float
+| VVec      of Misc.Dim.dim * float array
+| VMat      of Misc.Dim.dim * Misc.Dim.dim * float array array
+| VRecord   of value Map.Make(String).t
 | VPair     of value * value
 | VFunc     of closure * MlslAst.pattern * MlslAst.expr
+| VConstrU  of string
+| VConstrP  of string * value
+| VFixed    of value option ref
 and closure = value Map.Make(String).t
+
+val string_of_value_kind : value_kind -> string
 
 val empty_context : closure
 

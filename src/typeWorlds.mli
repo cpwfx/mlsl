@@ -6,11 +6,11 @@ type typ =
 | TBool
 | TFloat
 | TInt
-| TMat of MlslAst.dim * MlslAst.dim
+| TMat of Misc.Dim.dim * Misc.Dim.dim
 | TSampler2D
 | TSamplerCube
 | TUnit
-| TVec of MlslAst.dim
+| TVec of Misc.Dim.dim
 | TArrow    of typ * typ
 | TPair     of typ * typ
 | TRecord   of (string * typ) list

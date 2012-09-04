@@ -3,7 +3,8 @@
 %token <string> FLOAT
 %token EOF
 %token BR_OPN BR_CLS SBR_OPN SBR_CLS CBR_OPN CBR_CLS
-%token AMPER ARROW COLON COMMA DIV DOT EQ HAT MINUS MOD MUL PIPE PLUS POW SEMI
+%token AMPER ARROW COLON COMMA CONS DIV DOT EQ HAT MINUS MOD MUL PIPE PLUS POW
+%token SEMI
 %token ANY UNIT
 %token KW_AND KW_ATTR KW_BEGIN KW_BOOL KW_CONST KW_ELSE KW_END KW_FALSE KW_FIX
 %token KW_FLOAT KW_FRAGMENT KW_FUN KW_IF KW_IN KW_INT KW_LET KW_MAT22 KW_MAT23
@@ -41,24 +42,24 @@ typ:
 ;
 
 typ_atom:
-	  KW_BOOL        { MlslAst.TBool                            }
-	| KW_FLOAT       { MlslAst.TFloat                           }
-	| KW_INT         { MlslAst.TInt                             }
-	| KW_MAT22       { MlslAst.TMat(MlslAst.Dim2, MlslAst.Dim2) }
-	| KW_MAT23       { MlslAst.TMat(MlslAst.Dim2, MlslAst.Dim3) }
-	| KW_MAT24       { MlslAst.TMat(MlslAst.Dim2, MlslAst.Dim4) }
-	| KW_MAT32       { MlslAst.TMat(MlslAst.Dim3, MlslAst.Dim2) }
-	| KW_MAT33       { MlslAst.TMat(MlslAst.Dim3, MlslAst.Dim3) }
-	| KW_MAT34       { MlslAst.TMat(MlslAst.Dim3, MlslAst.Dim4) }
-	| KW_MAT42       { MlslAst.TMat(MlslAst.Dim4, MlslAst.Dim2) }
-	| KW_MAT43       { MlslAst.TMat(MlslAst.Dim4, MlslAst.Dim3) }
-	| KW_MAT44       { MlslAst.TMat(MlslAst.Dim4, MlslAst.Dim4) }
-	| KW_SAMPLER2D   { MlslAst.TSampler2D                       }
-	| KW_SAMPLERCUBE { MlslAst.TSamplerCube                     }
-	| KW_UNIT        { MlslAst.TUnit                            }
-	| KW_VEC2        { MlslAst.TVec MlslAst.Dim2                }
-	| KW_VEC3        { MlslAst.TVec MlslAst.Dim3                }
-	| KW_VEC4        { MlslAst.TVec MlslAst.Dim4                }
+	  KW_BOOL        { MlslAst.TBool                              }
+	| KW_FLOAT       { MlslAst.TFloat                             }
+	| KW_INT         { MlslAst.TInt                               }
+	| KW_MAT22       { MlslAst.TMat(Misc.Dim.Dim2, Misc.Dim.Dim2) }
+	| KW_MAT23       { MlslAst.TMat(Misc.Dim.Dim2, Misc.Dim.Dim3) }
+	| KW_MAT24       { MlslAst.TMat(Misc.Dim.Dim2, Misc.Dim.Dim4) }
+	| KW_MAT32       { MlslAst.TMat(Misc.Dim.Dim3, Misc.Dim.Dim2) }
+	| KW_MAT33       { MlslAst.TMat(Misc.Dim.Dim3, Misc.Dim.Dim3) }
+	| KW_MAT34       { MlslAst.TMat(Misc.Dim.Dim3, Misc.Dim.Dim4) }
+	| KW_MAT42       { MlslAst.TMat(Misc.Dim.Dim4, Misc.Dim.Dim2) }
+	| KW_MAT43       { MlslAst.TMat(Misc.Dim.Dim4, Misc.Dim.Dim3) }
+	| KW_MAT44       { MlslAst.TMat(Misc.Dim.Dim4, Misc.Dim.Dim4) }
+	| KW_SAMPLER2D   { MlslAst.TSampler2D                         }
+	| KW_SAMPLERCUBE { MlslAst.TSamplerCube                       }
+	| KW_UNIT        { MlslAst.TUnit                              }
+	| KW_VEC2        { MlslAst.TVec Misc.Dim.Dim2                 }
+	| KW_VEC3        { MlslAst.TVec Misc.Dim.Dim3                 }
+	| KW_VEC4        { MlslAst.TVec Misc.Dim.Dim4                 }
 ;
 
 typ_term:

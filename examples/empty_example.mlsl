@@ -1,0 +1,22 @@
+
+let rec concat l1 l2 =
+	match l1 with
+	| [] -> l2
+	| x :: xs -> x :: concat xs l2
+	end
+
+let test1 = 
+	(fun rec rev ll =
+		match ll with
+		| [] -> []
+		| x :: xs -> concat (rev xs) [ x ]
+		end
+	) [ 1; 2; 3 ]
+
+let test2 = 
+	(fix dup in fun ll ->
+		match ll with
+		| [] -> []
+		| x :: xs -> x :: x :: dup xs
+		end
+	) [ 1; 2; 3 ]

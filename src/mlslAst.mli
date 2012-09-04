@@ -27,20 +27,15 @@ module Swizzle : sig
 	val max_component_id : t -> int
 end
 
-type dim =
-| Dim2
-| Dim3
-| Dim4
-
 type typ =
 | TBool
 | TFloat
 | TInt
-| TMat of dim * dim
+| TMat of Misc.Dim.dim * Misc.Dim.dim
 | TSampler2D
 | TSamplerCube
 | TUnit
-| TVec of dim
+| TVec of Misc.Dim.dim
 | TArrow    of typ * typ
 | TPair     of typ * typ
 | TRecord   of (string * typ) list
@@ -147,8 +142,6 @@ type topdef =
 	{ td_pos  : Errors.position
 	; td_kind : topdef_kind
 	}
-
-val int_of_dim : dim -> int
 
 val make_pattern          : Lexing.position -> pattern_kind -> pattern
 val make_list_pattern_rev : Lexing.position -> pattern list -> pattern

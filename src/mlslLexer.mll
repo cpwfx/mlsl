@@ -52,6 +52,7 @@ let _ =
 	Hashtbl.add op_map "->" MlslParser.ARROW;
 	Hashtbl.add op_map ":"  MlslParser.COLON;
 	Hashtbl.add op_map ","  MlslParser.COMMA;
+	Hashtbl.add op_map "::" MlslParser.CONS;
 	Hashtbl.add op_map "/"  MlslParser.DIV;
 	Hashtbl.add op_map "."  MlslParser.DOT;
 	Hashtbl.add op_map "="  MlslParser.EQ;
@@ -93,6 +94,9 @@ rule token = parse
 					MlslParser.CONSTR x
 				else 
 					MlslParser.ID x
+		}
+	| digit+ as x {
+			MlslParser.NAT (int_of_string x)
 		}
 	| '$' (var_start var_char* as x) { MlslParser.VARYING x }
 	| op_char+ as x {

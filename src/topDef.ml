@@ -12,9 +12,37 @@ and value_kind =
 | VSampler  of string  * MlslAst.typ_term
 | VFragment of closure * MlslAst.expr
 | VVertex   of closure * MlslAst.expr
+| VBool     of bool
+| VInt      of int
+| VFloat    of float
+| VVec      of Misc.Dim.dim * float array
+| VMat      of Misc.Dim.dim * Misc.Dim.dim * float array array
+| VRecord   of value Map.Make(String).t
 | VPair     of value * value
 | VFunc     of closure * MlslAst.pattern * MlslAst.expr
+| VConstrU  of string
+| VConstrP  of string * value
+| VFixed    of value option ref
 and closure = value Map.Make(String).t
+
+let string_of_value_kind kind =
+	match kind with
+	| VAttr(name, _, _) -> "attribute " ^ name
+	| VConst(name, _) -> "constant " ^ name
+	| VSampler(name, _) -> "sampler " ^ name
+	| VFragment _ -> "fragment program"
+	| VVertex _ -> "vertex program"
+	| VBool _ -> "boolean value"
+	| VInt _ -> "integer value"
+	| VFloat _ -> "floating point value"
+	| VVec(dim, _) -> Printf.sprintf "%dD vector" (Misc.Dim.int_of_dim dim)
+	| VMat(d1, d2, _) -> Printf.sprintf "matrix (%dx%d)" (Misc.Dim.int_of_dim d1) (Misc.Dim.int_of_dim d2)
+	| VRecord _ -> "record"
+	| VPair _ -> "pair"
+	| VFunc _ -> "function"
+	| VConstrU name -> "constructor " ^ name
+	| VConstrP(name, _) -> "constructor " ^ name ^ "with value"
+	| VFixed _ -> "fixed value"
 
 let empty_context = StrMap.empty
 

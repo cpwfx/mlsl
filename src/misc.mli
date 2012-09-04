@@ -1,9 +1,56 @@
 (* File: misc.mli *)
 
-exception InternalError
+exception Internal_error
+
+val fast_pow : ('a -> 'a -> 'a) -> ('a -> 'a) -> 'a -> 'a -> int -> 'a
+
+module ArrayMat : sig
+	type t = float array array
+	val add : t -> t -> t
+	val div_scalar : t -> float -> t
+	val identity   : int -> t
+	val mod_scalar : t -> float -> t
+	val mul_matrix : t -> t -> t
+	val mul_scalar : t -> float -> t
+	val mul_vector : t -> float array -> float array
+	val neg : t -> t
+	val rcp : t -> t
+	val scalar_mul : float -> t -> t
+	val sub : t -> t -> t
+end
+
+module ArrayVec : sig
+	type t = float array
+	val add        : t -> t -> t
+	val div_comp   : t -> t -> t
+	val div_scalar : t -> float -> t
+	val dot        : t -> t -> float
+	val min_comp   : t -> t -> t
+	val mod_comp   : t -> t -> t
+	val mod_scalar : t -> float -> t
+	val mul_comp   : t -> t -> t
+	val mul_scalar : t -> float -> t
+	val neg        : t -> t
+	val pow_comp   : t -> t -> t
+	val pow_scalar : t -> float -> t
+	val rcp        : t -> t
+	val scalar_div : float -> t -> t
+	val scalar_mod : float -> t -> t
+	val scalar_mul : float -> t -> t
+	val sub        : t -> t -> t
+end
 
 module Char : sig
 	val is_upper : char -> bool
+end
+
+module Dim : sig
+	type dim =
+	| Dim2
+	| Dim3
+	| Dim4
+	val int_of_dim : dim -> int
+	val range_of_dim : dim -> int list
 end
 
 module Fresh : sig
@@ -38,6 +85,7 @@ module ListExt : sig
 	val is_empty      : 'a list -> bool
 	val map_filter    : ('a -> 'b option) -> 'a list -> 'b list
 	val opt_fold_left : ('a -> 'b -> 'b option) -> 'b option -> 'a list -> 'b option
+	val to_string     : ('a -> string) -> 'a list -> string
 end
 
 module Opt : sig

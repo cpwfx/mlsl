@@ -1,5 +1,7 @@
 (* File: typeWorlds.ml *)
 
+open Misc.Dim
+
 module StrMap = Map.Make(String)
 module IntMap = Map.Make(Misc.Int)
 
@@ -12,11 +14,11 @@ type typ =
 | TBool
 | TFloat
 | TInt
-| TMat of MlslAst.dim * MlslAst.dim
+| TMat of dim * dim
 | TSampler2D
 | TSamplerCube
 | TUnit
-| TVec of MlslAst.dim
+| TVec of dim
 | TArrow    of typ * typ
 | TPair     of typ * typ
 | TRecord   of (string * typ) list
@@ -24,15 +26,15 @@ type typ =
 | TFragment of (string * typ) list
 | TVertexTop
 
-let tMat22 = TMat(MlslAst.Dim2, MlslAst.Dim2)
-let tMat23 = TMat(MlslAst.Dim2, MlslAst.Dim3)
-let tMat24 = TMat(MlslAst.Dim2, MlslAst.Dim4)
-let tMat32 = TMat(MlslAst.Dim3, MlslAst.Dim2)
-let tMat33 = TMat(MlslAst.Dim3, MlslAst.Dim3)
-let tMat34 = TMat(MlslAst.Dim3, MlslAst.Dim4)
-let tMat42 = TMat(MlslAst.Dim4, MlslAst.Dim2)
-let tMat43 = TMat(MlslAst.Dim4, MlslAst.Dim3)
-let tMat44 = TMat(MlslAst.Dim4, MlslAst.Dim4)
+let tMat22 = TMat(Dim2, Dim2)
+let tMat23 = TMat(Dim2, Dim3)
+let tMat24 = TMat(Dim2, Dim4)
+let tMat32 = TMat(Dim3, Dim2)
+let tMat33 = TMat(Dim3, Dim3)
+let tMat34 = TMat(Dim3, Dim4)
+let tMat42 = TMat(Dim4, Dim2)
+let tMat43 = TMat(Dim4, Dim3)
+let tMat44 = TMat(Dim4, Dim4)
 
 type t = typ list StrMap.t
 

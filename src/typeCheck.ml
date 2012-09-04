@@ -160,11 +160,10 @@ let rec fast_check_pattern gamma pat =
 let rec fast_check_code gamma expr =
 	match expr.MlslAst.e_kind with
 	| MlslAst.EVar x ->
-		begin match Globals.check_name x with
+		if StrSet.mem x gamma then ()
+		else begin match Globals.check_name x with
 		| None ->
-			if StrSet.mem x gamma then ()
-			else 
-				Errors.error_p expr.MlslAst.e_pos "Undefined variable %s." x
+			Errors.error_p expr.MlslAst.e_pos "Undefined variable %s." x
 		| Some _ -> ()
 		end
 	| MlslAst.EVarying x -> ()
@@ -251,7 +250,7 @@ let is_vertex_type (world, tp) =
 	match tp with
 	| TypeWorlds.TRecord r ->
 		List.exists (fun (n, t) -> 
-				n = "position" && TypeWorlds.to_ast world t = MlslAst.TVec MlslAst.Dim4
+				n = "position" && TypeWorlds.to_ast world t = MlslAst.TVec Misc.Dim.Dim4
 			) r
 	| _ -> false
 

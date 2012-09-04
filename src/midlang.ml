@@ -1,33 +1,12 @@
 (* File: midlang.ml *)
 
+open Misc.Dim
+
 module StrMap = Map.Make(String)
 
 let instr_fresh   = Misc.Fresh.create ()
 let var_fresh     = Misc.Fresh.create ()
 let sampler_fresh = Misc.Fresh.create ()
-
-type dim =
-| Dim2
-| Dim3
-| Dim4
-
-let int_of_dim d =
-	match d with
-	| Dim2 -> 2
-	| Dim3 -> 3
-	| Dim4 -> 4
-
-let range_of_dim d =
-	match d with
-	| Dim2 -> [ 0; 1 ]
-	| Dim3 -> [ 0; 1; 2 ]
-	| Dim4 -> [ 0; 1; 2; 3 ]
-
-let dim_of_ast d =
-	match d with
-	| MlslAst.Dim2 -> Dim2
-	| MlslAst.Dim3 -> Dim3
-	| MlslAst.Dim4 -> Dim4
 
 type typ =
 | TFloat
@@ -166,7 +145,7 @@ let vectyp_of_int n =
 	| 2 -> TVec Dim2
 	| 3 -> TVec Dim3
 	| 4 -> TVec Dim4
-	| _ -> raise Misc.InternalError
+	| _ -> raise Misc.Internal_error
 
 (* ========================================================================= *)
 
@@ -176,12 +155,12 @@ let create_var_ast sort ast_typ =
 		begin match ast_typ with
 		| MlslAst.TFloat -> TFloat
 		| MlslAst.TInt   -> TInt
-		| MlslAst.TMat(d1, d2) -> TMat(dim_of_ast d1, dim_of_ast d2)
-		| MlslAst.TVec d       -> TVec(dim_of_ast d)
+		| MlslAst.TMat(d1, d2) -> TMat(d1, d2)
+		| MlslAst.TVec d       -> TVec d
 		| MlslAst.TBool | MlslAst.TSampler2D | MlslAst.TSamplerCube 
 		| MlslAst.TUnit | MlslAst.TArrow _ | MlslAst.TPair _
 		| MlslAst.TRecord _ | MlslAst.TVertex _ | MlslAst.TFragment _
-		| MlslAst.TVertexTop -> raise Misc.InternalError
+		| MlslAst.TVertexTop -> raise Misc.Internal_error
 		end
 	; var_sort = sort
 	}
@@ -199,7 +178,7 @@ let create_sampler_ast name typ =
 		begin match typ with
 		| MlslAst.TSampler2D   -> SDim2D
 		| MlslAst.TSamplerCube -> SDimCube
-		| _ -> raise Misc.InternalError
+		| _ -> raise Misc.Internal_error
 		end
 	}
 
@@ -295,11 +274,38 @@ let rec regval_of_value code value =
 		| TopDef.VAttr _ | TopDef.VConst _ | TopDef.VSampler _ ->
 			RVShDepValue value
 		| TopDef.VFragment _ | TopDef.VVertex _ -> RVValue value
+		| TopDef.VBool _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VBool.";
+			RVValue value
+		| TopDef.VInt _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VInt.";
+			RVValue value
+		| TopDef.VFloat _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VFloat.";
+			RVValue value
+		| TopDef.VVec _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VVec.";
+			RVValue value
+		| TopDef.VMat _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VMat.";
+			RVValue value
+		| TopDef.VRecord _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VRecord.";
+			RVValue value
+		| TopDef.VConstrU _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VConstrU.";
+			RVValue value
+		| TopDef.VConstrP _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VConstrP.";
+			RVValue value
 		| TopDef.VPair _ ->
 			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VPair.";
 			RVValue value
 		| TopDef.VFunc(closure, pat, body) ->
 			RVFunc(StrMap.map (regval_of_value code) closure, pat, body)
+		| TopDef.VFixed _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VFixed.";
+			RVValue value
 		end
 	}
 			
@@ -324,6 +330,21 @@ let rec bind_pattern code gamma pat rv =
 	| MlslAst.PTypedVar(x, tp) ->
 		let rv' = cast_regval_to_type pat.MlslAst.p_pos code rv tp.MlslAst.tt_typ in
 			StrMap.add x rv' gamma
+	| MlslAst.PTrue ->
+		Errors.error_p pat.MlslAst.p_pos "Unimplemented: bind_pattern PTrue";
+		raise Unfold_exception
+	| MlslAst.PFalse ->
+		Errors.error_p pat.MlslAst.p_pos "Unimplemented: bind_pattern PTrue";
+		raise Unfold_exception
+	| MlslAst.PPair _ ->
+		Errors.error_p pat.MlslAst.p_pos "Unimplemented: bind_pattern PPair";
+		raise Unfold_exception
+	| MlslAst.PConstrU _ ->
+		Errors.error_p pat.MlslAst.p_pos "Unimplemented: bind_pattern PConstrU";
+		raise Unfold_exception
+	| MlslAst.PConstrP _ ->
+		Errors.error_p pat.MlslAst.p_pos "Unimplemented: bind_pattern PConstrP";
+		raise Unfold_exception
 
 let typ_and_ins_of_add pos tp1 tp2 =
 	match tp1, tp2 with
@@ -500,11 +521,38 @@ let shader_dependent_value pos code vertex value =
 					v
 				)
 		| TopDef.VFragment _ | TopDef.VVertex _ -> RVValue value
+		| TopDef.VBool _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VBool.";
+			RVValue value
+		| TopDef.VInt _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VInt.";
+			RVValue value
+		| TopDef.VFloat _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VFloat.";
+			RVValue value
+		| TopDef.VVec _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VVec.";
+			RVValue value
+		| TopDef.VMat _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VMat.";
+			RVValue value
+		| TopDef.VRecord _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VRecord.";
+			RVValue value
 		| TopDef.VPair _ ->
 			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VPair.";
 			RVValue value
 		| TopDef.VFunc(closure, pat, body) ->
 			RVFunc(StrMap.map (regval_of_value code) closure, pat, body)
+		| TopDef.VConstrP _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VConstrP.";
+			RVValue value
+		| TopDef.VConstrU _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VConstrU.";
+			RVValue value
+		| TopDef.VFixed _ ->
+			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VFixed.";
+			RVValue value
 		end
 	}
 
@@ -523,7 +571,7 @@ let unfold_code_var vertex code gamma expr x =
 	end else begin match TopDef.check_name x with
 	| None ->
 		Errors.error_p expr.MlslAst.e_pos "Internal error!!!";
-		raise Misc.InternalError
+		raise Misc.Internal_error
 	| Some value ->
 		shader_dependent_value expr.MlslAst.e_pos code vertex value
 	end
@@ -548,6 +596,12 @@ let rec unfold_code vertex code gamma expr =
 		end
 	| MlslAst.EInt n ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EInt.";
+		raise Unfold_exception
+	| MlslAst.ETrue ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code ETrue.";
+		raise Unfold_exception
+	| MlslAst.EFalse ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EFalse.";
 		raise Unfold_exception
 	| MlslAst.ESwizzle(e, swizzle) ->
 		let rv = unfold_code vertex code gamma e in
@@ -726,13 +780,25 @@ let rec unfold_code vertex code gamma expr =
 		let rv1   = unfold_code vertex code gamma e1 in
 		let gamma = bind_pattern code gamma pat rv1  in
 			unfold_code vertex code gamma e2
+	| MlslAst.EFix _ ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EFix.";
+		raise Unfold_exception
 	| MlslAst.EIf(cnd, e1, e2) ->
 		Errors.error_p expr.MlslAst.e_pos
 			"Unimplemented: unfold_code EIf";
 		raise Unfold_exception
+	| MlslAst.EMatch _ ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EMatch.";
+		raise Unfold_exception
 	| MlslAst.EFragment _ | MlslAst.EVertex _ ->
 		Errors.error_p expr.MlslAst.e_pos
 			"Can not unfold shader inside shader.";
+		raise Unfold_exception
+	| MlslAst.EConstrU _ ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EConstrU.";
+		raise Unfold_exception
+	| MlslAst.EConstrP _ ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EConstrP.";
 		raise Unfold_exception
 
 let unfold_vertex gamma expr code =

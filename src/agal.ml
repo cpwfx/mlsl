@@ -185,8 +185,8 @@ let map_variable var =
 				begin match var.Midlang.var_typ with
 				| Midlang.TFloat       -> (1, 1)
 				| Midlang.TInt         -> (1, 1)
-				| Midlang.TMat(d1, d2) -> (Midlang.int_of_dim d1, Midlang.int_of_dim d2)
-				| Midlang.TVec d       -> (1, Midlang.int_of_dim d)
+				| Midlang.TMat(d1, d2) -> (Misc.Dim.int_of_dim d1, Misc.Dim.int_of_dim d2)
+				| Midlang.TVec d       -> (1, Misc.Dim.int_of_dim d)
 				end
 			; var_reg        = None
 			; var_vec3output = false
@@ -314,9 +314,9 @@ let make_dest_row_reg row dim reg =
 	; dst_row  = row
 	; dst_mask = 
 		begin match dim with
-		| Midlang.Dim2 -> dst_mask_vec2
-		| Midlang.Dim3 -> dst_mask_vec3
-		| Midlang.Dim4 -> dst_mask_vec4
+		| Misc.Dim.Dim2 -> dst_mask_vec2
+		| Misc.Dim.Dim3 -> dst_mask_vec3
+		| Misc.Dim.Dim4 -> dst_mask_vec4
 		end
 	}
 let make_dest dim reg = make_dest_row_reg 0 dim (map_variable reg)
@@ -332,7 +332,7 @@ let make_dest_comp comp reg =
 		| 1 -> dst_mask_y
 		| 2 -> dst_mask_z
 		| 3 -> dst_mask_w
-		| _ -> raise Misc.InternalError
+		| _ -> raise Misc.Internal_error
 		end
 	}
 
@@ -345,7 +345,7 @@ let make_dest_comp_reg comp reg =
 		| 1 -> dst_mask_y
 		| 2 -> dst_mask_z
 		| 3 -> dst_mask_w
-		| _ -> raise Misc.InternalError
+		| _ -> raise Misc.Internal_error
 		end
 	}
 
@@ -393,8 +393,8 @@ let make_source_row_dim_reg row dim reg =
 	; src_swizzle =
 		[| 0
 		;  1
-		;  min 2 (Midlang.int_of_dim dim)
-		;  min 3 (Midlang.int_of_dim dim)
+		;  min 2 (Misc.Dim.int_of_dim dim)
+		;  min 3 (Misc.Dim.int_of_dim dim)
 		|]
 	; src_offset  = None
 	}
@@ -438,7 +438,7 @@ let build_binop rv r1 r2 op =
 					make_dest_row row dim rv, 
 					make_source_row row r1, 
 					make_source_row row r2))
-				) (Midlang.range_of_dim dim1))
+				) (Misc.Dim.range_of_dim dim1))
 	| Midlang.BOAddV dim ->
 		Some [create_instr (IAdd(make_dest dim rv, make_source r1, make_source r2))]
 	| Midlang.BOSubF ->
@@ -448,7 +448,7 @@ let build_binop rv r1 r2 op =
 					make_dest_row row dim rv, 
 					make_source_row row r1, 
 					make_source_row row r2))
-				) (Midlang.range_of_dim dim1))
+				) (Misc.Dim.range_of_dim dim1))
 	| Midlang.BOSubV dim ->
 		Some [create_instr (ISub(make_dest dim rv, make_source r1, make_source r2))]
 	| Midlang.BOMulFF ->
@@ -458,48 +458,48 @@ let build_binop rv r1 r2 op =
 					make_dest_row row dim rv, 
 					make_source_row row r1, 
 					make_source_float r2))
-				) (Midlang.range_of_dim dim1))
+				) (Misc.Dim.range_of_dim dim1))
 	| Midlang.BOMulMM(dim1, dim2, dim3) ->
 		Errors.error "Unimplemented Agal.build_binop IMulMM%d%d%d"
-			(Midlang.int_of_dim dim1) (Midlang.int_of_dim dim2)	(Midlang.int_of_dim dim3);
+			(Misc.Dim.int_of_dim dim1) (Misc.Dim.int_of_dim dim2) (Misc.Dim.int_of_dim dim3);
 		None
-	| Midlang.BOMulMV(dim, Midlang.Dim2) ->
-		let tmp = make_temp_reg 1 (Midlang.int_of_dim dim) in
+	| Midlang.BOMulMV(dim, Misc.Dim.Dim2) ->
+		let tmp = make_temp_reg 1 (Misc.Dim.int_of_dim dim) in
 		Some (List.map (fun row -> create_instr (IDp4(
 					make_dest_comp_reg row tmp,
 					make_source_row_dp2 row r1,
 					make_source_dp2 r2))
-				) (Midlang.range_of_dim dim) @
+				) (Misc.Dim.range_of_dim dim) @
 			[create_instr (
 				IMul(make_dest dim rv, make_source_reg tmp, make_const_float 0.5)) ])
-	| Midlang.BOMulMV(Midlang.Dim2, Midlang.Dim3) ->
+	| Midlang.BOMulMV(Misc.Dim.Dim2, Misc.Dim.Dim3) ->
 		Some (List.map (fun row -> create_instr (IDp3(
 					make_dest_comp row rv,
 					make_source_row row r1,
 					make_source r2))
 				) [ 0; 1 ])
-	| Midlang.BOMulMV(Midlang.Dim3, Midlang.Dim3) ->
+	| Midlang.BOMulMV(Misc.Dim.Dim3, Misc.Dim.Dim3) ->
 		Some [create_instr 
-			(IM33(make_dest Midlang.Dim3 rv, make_source r2, make_source r1))]
-	| Midlang.BOMulMV(Midlang.Dim4, Midlang.Dim3) ->
+			(IM33(make_dest Misc.Dim.Dim3 rv, make_source r2, make_source r1))]
+	| Midlang.BOMulMV(Misc.Dim.Dim4, Misc.Dim.Dim3) ->
 		Some
 		[ create_instr 
-			(IM33(make_dest Midlang.Dim3 rv, make_source r2, make_source r1))
+			(IM33(make_dest Misc.Dim.Dim3 rv, make_source r2, make_source r1))
 		; create_instr
 			(IDp3(make_dest_comp 3 rv, make_source r2, make_source_row 3 r1))
 		]
-	| Midlang.BOMulMV(Midlang.Dim2, Midlang.Dim4) ->
+	| Midlang.BOMulMV(Misc.Dim.Dim2, Misc.Dim.Dim4) ->
 		Some (List.map (fun row -> create_instr (IDp4(
 					make_dest_comp row rv,
 					make_source_row row r1,
 					make_source r2))
 				) [ 0; 1 ])
-	| Midlang.BOMulMV(Midlang.Dim3, Midlang.Dim4) ->
+	| Midlang.BOMulMV(Misc.Dim.Dim3, Misc.Dim.Dim4) ->
 		Some [create_instr 
-			(IM34(make_dest Midlang.Dim3 rv, make_source r2, make_source r1))]
-	| Midlang.BOMulMV(Midlang.Dim4, Midlang.Dim4) ->
+			(IM34(make_dest Misc.Dim.Dim3 rv, make_source r2, make_source r1))]
+	| Midlang.BOMulMV(Misc.Dim.Dim4, Misc.Dim.Dim4) ->
 		Some [create_instr 
-			(IM44(make_dest Midlang.Dim4 rv, make_source r2, make_source r1))]
+			(IM44(make_dest Misc.Dim.Dim4 rv, make_source r2, make_source r1))]
 	| Midlang.BOMulVF dim ->
 		Some [create_instr
 			(IMul(make_dest dim rv, make_source r1, make_source_float r2))]
@@ -517,7 +517,7 @@ let build_binop rv r1 r2 op =
 					make_dest_row row dim rv,
 					make_source_row_dim row dim r1,
 					make_source_dim dim r2))
-				) (Midlang.range_of_dim dim1))
+				) (Misc.Dim.range_of_dim dim1))
 	| Midlang.BODivVF dim ->
 		Some [create_instr
 			(IDiv(make_dest dim rv, make_source_dim dim r1, make_source_float r2))]
@@ -536,7 +536,7 @@ let build_binop rv r1 r2 op =
 				make_dest_float rv, make_source_float_reg tmp2, make_source_float r2))
 			]
 	| Midlang.BOModFV dim ->
-		let d = Midlang.int_of_dim dim in
+		let d = Misc.Dim.int_of_dim dim in
 		let tmp1 = make_temp_reg 1 d in
 		let tmp2 = make_temp_reg 1 d in
 		Some
@@ -548,7 +548,7 @@ let build_binop rv r1 r2 op =
 				make_dest dim rv, make_source_dim_reg dim tmp2, make_source_dim dim r2))
 			]
 	| Midlang.BOModMF(dim1, dim) ->
-		let d = Midlang.int_of_dim dim in
+		let d = Misc.Dim.int_of_dim dim in
 		Some (Misc.ListExt.concat_map (fun row -> 
 			let tmp1 = make_temp_reg 1 d in
 			let tmp2 = make_temp_reg 1 d in
@@ -558,9 +558,9 @@ let build_binop rv r1 r2 op =
 				make_dest_reg dim tmp2, make_source_dim_reg dim tmp1))
 			; create_instr (IMul(
 				make_dest_row row dim rv, make_source_dim_reg dim tmp2, make_source_dim dim r2))
-			]) (Midlang.range_of_dim dim1))
+			]) (Misc.Dim.range_of_dim dim1))
 	| Midlang.BOModVF dim ->
-		let d = Midlang.int_of_dim dim in
+		let d = Misc.Dim.int_of_dim dim in
 		let tmp1 = make_temp_reg 1 d in
 		let tmp2 = make_temp_reg 1 d in
 		Some
@@ -572,7 +572,7 @@ let build_binop rv r1 r2 op =
 				make_dest dim rv, make_source_dim_reg dim tmp2, make_source_float r2))
 			]
 	| Midlang.BOModVV dim ->
-		let d = Midlang.int_of_dim dim in
+		let d = Misc.Dim.int_of_dim dim in
 		let tmp1 = make_temp_reg 1 d in
 		let tmp2 = make_temp_reg 1 d in
 		Some
@@ -583,18 +583,18 @@ let build_binop rv r1 r2 op =
 			; create_instr (IMul(
 				make_dest dim rv, make_source_dim_reg dim tmp2, make_source_dim dim r2))
 			]
-	| Midlang.BODot Midlang.Dim2 ->
+	| Midlang.BODot Misc.Dim.Dim2 ->
 		let tmp = make_temp_reg 1 2 in
 		Some
 			[ create_instr (IDp4(
-				make_dest_reg Midlang.Dim2 tmp, make_source_dp2 r1, make_source_dp2 r2))
+				make_dest_reg Misc.Dim.Dim2 tmp, make_source_dp2 r1, make_source_dp2 r2))
 			; create_instr (IMul(
-				make_dest Midlang.Dim2 rv, make_source_reg tmp, make_const_float 0.5))
+				make_dest Misc.Dim.Dim2 rv, make_source_reg tmp, make_const_float 0.5))
 			]
-	| Midlang.BODot Midlang.Dim3 ->
+	| Midlang.BODot Misc.Dim.Dim3 ->
 		Some [create_instr
 			(IDp3(make_dest_float rv, make_source r1, make_source r2))]
-	| Midlang.BODot Midlang.Dim4 ->
+	| Midlang.BODot Misc.Dim.Dim4 ->
 		Some [create_instr
 			(IDp4(make_dest_float rv, make_source r1, make_source r2))]
 	| Midlang.BOCross2 ->
@@ -602,7 +602,7 @@ let build_binop rv r1 r2 op =
 			(ICrs2(make_dest_float rv, make_source r1, make_source r2))]
 	| Midlang.BOCross3 ->
 		Some [create_instr 
-			(ICrs(make_dest Midlang.Dim3 rv, make_source r1, make_source r2))]
+			(ICrs(make_dest Misc.Dim.Dim3 rv, make_source r1, make_source r2))]
 	| Midlang.BOPowFF ->
 		Some [create_instr 
 			(IPow(make_dest_float rv, make_source_float r1, make_source_float r2))]
@@ -626,7 +626,7 @@ let build_unop rv r1 op =
 	| Midlang.UONegM(dim1, dim) ->
 		Some (List.map (fun row -> 
 					create_instr (INeg(make_dest_row row dim rv, make_source_row_dim row dim r1))
-				) (Midlang.range_of_dim dim1))
+				) (Misc.Dim.range_of_dim dim1))
 	| Midlang.UONegV dim ->
 		Some [create_instr(INeg(make_dest dim rv, make_source r1))]
 
@@ -656,11 +656,11 @@ let build_ins globals ins =
 		| Midlang.TVec dim ->
 			Some [create_instr 
 					(IMov(make_dest dim dst, make_swizzled_source src swizzle))] 
-		| _ -> raise Misc.InternalError
+		| _ -> raise Misc.Internal_error
 		end
 	| Midlang.ITex(rv, vc, sam) ->
 		Some [create_instr 
-			(ITex(make_dest Midlang.Dim4 rv, make_source vc, map_sampler sam))]
+			(ITex(make_dest Misc.Dim.Dim4 rv, make_source vc, map_sampler sam))]
 	| Midlang.IRet reg ->
 		Some [create_instr (IMov(make_dest_output (), make_source reg))]
 
@@ -1001,7 +1001,7 @@ let write_crs2_source out src dst_field =
 				;  src.src_swizzle.(3)
 				|]
 			| 2 -> src.src_swizzle
-			| _ -> raise Misc.InternalError
+			| _ -> raise Misc.Internal_error
 		} in
 	write_source out real_src 0
 
@@ -1217,7 +1217,7 @@ let write_crs2_source_asm vertex src dst_field =
 				;  src.src_swizzle.(3)
 				|]
 			| 2 -> src.src_swizzle
-			| _ -> raise Misc.InternalError
+			| _ -> raise Misc.Internal_error
 		} in
 	write_source_asm vertex real_src 0
 

@@ -1,12 +1,14 @@
 (* File: builtin.ml *)
 
+open Misc.Dim
+
 let (-->) t1 t2 =
 	MlslAst.TArrow(t1, t2)
 
 let mt_float = MlslAst.TFloat
-let mt_vec2  = MlslAst.TVec MlslAst.Dim2
-let mt_vec3  = MlslAst.TVec MlslAst.Dim3
-let mt_vec4  = MlslAst.TVec MlslAst.Dim4
+let mt_vec2  = MlslAst.TVec Dim2
+let mt_vec3  = MlslAst.TVec Dim3
+let mt_vec4  = MlslAst.TVec Dim4
 
 type simple_expr =
 | Var   of string

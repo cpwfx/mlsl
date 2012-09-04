@@ -1,19 +1,10 @@
 (* File: midlang.mli *)
 
-type dim =
-| Dim2
-| Dim3
-| Dim4
-
-val int_of_dim : dim -> int
-val range_of_dim : dim -> int list
-val dim_of_ast : MlslAst.dim -> dim
-
 type typ =
 | TFloat
 | TInt
-| TMat of dim * dim
-| TVec of dim
+| TMat of Misc.Dim.dim * Misc.Dim.dim
+| TVec of Misc.Dim.dim
 
 type variable_sort =
 | VSAttribute
@@ -70,40 +61,40 @@ type param =
 
 type binop =
 | BOAddF
-| BOAddM  of dim * dim
-| BOAddV  of dim
+| BOAddM  of Misc.Dim.dim * Misc.Dim.dim
+| BOAddV  of Misc.Dim.dim
 | BOSubF
-| BOSubM  of dim * dim
-| BOSubV  of dim
+| BOSubM  of Misc.Dim.dim * Misc.Dim.dim
+| BOSubV  of Misc.Dim.dim
 | BOMulFF
-| BOMulMF of dim * dim
-| BOMulMM of dim * dim * dim
-| BOMulMV of dim * dim
-| BOMulVF of dim
-| BOMulVV of dim
+| BOMulMF of Misc.Dim.dim * Misc.Dim.dim
+| BOMulMM of Misc.Dim.dim * Misc.Dim.dim * Misc.Dim.dim
+| BOMulMV of Misc.Dim.dim * Misc.Dim.dim
+| BOMulVF of Misc.Dim.dim
+| BOMulVV of Misc.Dim.dim
 | BODivFF
-| BODivFV of dim
-| BODivMF of dim * dim
-| BODivVF of dim
-| BODivVV of dim
+| BODivFV of Misc.Dim.dim
+| BODivMF of Misc.Dim.dim * Misc.Dim.dim
+| BODivVF of Misc.Dim.dim
+| BODivVV of Misc.Dim.dim
 | BOModFF
-| BOModFV of dim
-| BOModMF of dim * dim
-| BOModVF of dim
-| BOModVV of dim
-| BODot   of dim
+| BOModFV of Misc.Dim.dim
+| BOModMF of Misc.Dim.dim * Misc.Dim.dim
+| BOModVF of Misc.Dim.dim
+| BOModVV of Misc.Dim.dim
+| BODot   of Misc.Dim.dim
 | BOCross2
 | BOCross3
 | BOPowFF
-| BOPowVF of dim
-| BOPowVV of dim
+| BOPowVF of Misc.Dim.dim
+| BOPowVV of Misc.Dim.dim
 | BOMinF
-| BOMinV  of dim
+| BOMinV  of Misc.Dim.dim
 
 type unop =
 | UONegF
-| UONegM of dim * dim
-| UONegV of dim
+| UONegM of Misc.Dim.dim * Misc.Dim.dim
+| UONegV of Misc.Dim.dim
 
 type instr_kind =
 | IMov     of variable * variable
