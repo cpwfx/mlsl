@@ -56,16 +56,32 @@ let _ =
 	Hashtbl.add op_map "/"  MlslParser.DIV;
 	Hashtbl.add op_map "."  MlslParser.DOT;
 	Hashtbl.add op_map "="  MlslParser.EQ;
+	Hashtbl.add op_map ">=" MlslParser.GE;
+	Hashtbl.add op_map ">"  MlslParser.GT;
 	Hashtbl.add op_map "^"  MlslParser.HAT;
+	Hashtbl.add op_map "<=" MlslParser.LE;
+	Hashtbl.add op_map "<"  MlslParser.LT;
 	Hashtbl.add op_map "-"  MlslParser.MINUS;
 	Hashtbl.add op_map "%"  MlslParser.MOD;
 	Hashtbl.add op_map "*"  MlslParser.MUL;
+	Hashtbl.add op_map "<>" MlslParser.NEQ;
 	Hashtbl.add op_map "|"  MlslParser.PIPE;
 	Hashtbl.add op_map "+"  MlslParser.PLUS;
 	Hashtbl.add op_map "**" MlslParser.POW;
 	Hashtbl.add op_map ";"  MlslParser.SEMI;
 	()
-	
+
+let nat_regexp = Str.regexp "^[0-9]+$"
+
+let float_regexp = Str.regexp "^[0-9]+.[0-9]*([eE][+-]?[0-9]+)?$"
+
+let tokenize_number str =
+	if Str.string_match nat_regexp str 0 then
+		MlslParser.NAT (int_of_string str)
+	else if Str.string_match float_regexp str 0 then
+		MlslParser.FLOAT (float_of_string str)
+	else
+		raise (ParserMisc.Invalid_number str)
 }
 
 let digit     = ['0'-'9']
@@ -95,8 +111,8 @@ rule token = parse
 				else 
 					MlslParser.ID x
 		}
-	| digit+ as x {
-			MlslParser.NAT (int_of_string x)
+	| digit (var_char | digit | '.')* as x {
+			tokenize_number x
 		}
 	| '$' (var_start var_char* as x) { MlslParser.VARYING x }
 	| op_char+ as x {

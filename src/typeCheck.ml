@@ -68,6 +68,9 @@ let rec infer_type gamma worlds expr =
 	| MlslAst.EInt n ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EInt.";
 		[]
+	| MlslAst.EFloat f ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EFloat.";
+		[]
 	| MlslAst.ETrue ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type ETrue.";
 		[]
@@ -167,9 +170,10 @@ let rec fast_check_code gamma expr =
 		| Some _ -> ()
 		end
 	| MlslAst.EVarying x -> ()
-	| MlslAst.EInt n -> ()
-	| MlslAst.ETrue  -> ()
-	| MlslAst.EFalse -> ()
+	| MlslAst.EInt n   -> ()
+	| MlslAst.EFloat f -> ()
+	| MlslAst.ETrue    -> ()
+	| MlslAst.EFalse   -> ()
 	| MlslAst.ESwizzle(v, _) ->
 		fast_check_code gamma v
 	| MlslAst.ERecord rd ->

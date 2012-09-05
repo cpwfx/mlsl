@@ -20,6 +20,10 @@ let parse fname =
 			"Invalid character '%s' (0x%X)."
 			(Char.escaped c) (Char.code c);
 		None
+	| ParserMisc.Invalid_number num ->
+		Errors.fatal_error_p (Errors.UserPos lexbuf.Lexing.lex_start_p)
+			"Invalid token \"%s\"." num;
+		None
 	| ParserMisc.Unknown_operator op ->
 		Errors.fatal_error_p (Errors.UserPos lexbuf.Lexing.lex_start_p)
 			"Unrecognized operator \"%s\"." op;

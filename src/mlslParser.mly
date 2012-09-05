@@ -1,10 +1,10 @@
 %token <string> ID CONSTR VARYING
 %token <int>    NAT
-%token <string> FLOAT
+%token <float>  FLOAT
 %token EOF
 %token BR_OPN BR_CLS SBR_OPN SBR_CLS CBR_OPN CBR_CLS
-%token AMPER ARROW COLON COMMA CONS DIV DOT EQ HAT MINUS MOD MUL PIPE PLUS POW
-%token SEMI
+%token AMPER ARROW COLON COMMA CONS DIV DOT EQ GE GT HAT LE LT MINUS MOD MUL
+%token NEQ PIPE PLUS POW SEMI
 %token ANY UNIT
 %token KW_AND KW_ATTR KW_BEGIN KW_BOOL KW_CONST KW_ELSE KW_END KW_FALSE KW_FIX
 %token KW_FLOAT KW_FRAGMENT KW_FUN KW_IF KW_IN KW_INT KW_LET KW_MAT22 KW_MAT23
@@ -15,6 +15,7 @@
 %right ARROW
 %left  STMT
 %left  COMMA
+%left  EQ GE GT LE LT NEQ
 %right CONS
 %left  MINUS PLUS
 %left  AMPER DIV HAT MOD MUL
@@ -97,6 +98,30 @@ expr:
 	| expr COMMA expr {
 			MlslAst.make_expr (Parsing.rhs_start_pos 2) (MlslAst.EPair($1, $3))
 		}
+	| expr EQ expr {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2)
+				(MlslAst.EBinOp(MlslAst.BOEq, $1, $3))
+		}
+	| expr NEQ expr {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2)
+				(MlslAst.EBinOp(MlslAst.BONeq, $1, $3))
+		}
+	| expr LT expr {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2)
+				(MlslAst.EBinOp(MlslAst.BOLt, $1, $3))
+		}
+	| expr LE expr {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2)
+				(MlslAst.EBinOp(MlslAst.BOLe, $1, $3))
+		}
+	| expr GT expr {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2)
+				(MlslAst.EBinOp(MlslAst.BOGt, $1, $3))
+		}
+	| expr GE expr {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2)
+				(MlslAst.EBinOp(MlslAst.BOGe, $1, $3))
+		}
 	| expr CONS expr {
 			let pos = Parsing.rhs_start_pos 2 in
 			MlslAst.make_expr pos (MlslAst.EConstrP("::",
@@ -160,6 +185,7 @@ expr_call_atom_list_rev:
 
 expr_call_atom:
 	  NAT { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EInt $1) }
+	| FLOAT { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EFloat $1) }
 	| ID  {	MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar $1) }
 	| VARYING { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVarying $1) }
 	| CONSTR  { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EConstrU $1) }
@@ -179,6 +205,18 @@ expr_call_atom:
 	| expr_call_atom DOT ID {
 			MlslAst.make_select (Parsing.rhs_start_pos 2) $1 $3
 		}
+	| KW_BOOL { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "bool") }
+	| KW_FLOAT { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "float") }
+	| KW_INT { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "int") }
+	| KW_MAT22 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat22") }
+	| KW_MAT23 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat23") }
+	| KW_MAT24 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat24") }
+	| KW_MAT32 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat32") }
+	| KW_MAT33 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat33") }
+	| KW_MAT34 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat34") }
+	| KW_MAT42 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat42") }
+	| KW_MAT43 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat43") }
+	| KW_MAT44 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat44") }
 ;
 
 let_pattern:

@@ -17,7 +17,7 @@ $(BINDIR):
 
 $(BINDIR)/mlsl: $(foreach file, $(OCAMLFILES), $(OBJDIR)/$(file).cmx) \
 	$(OBJDIR)/mlsl.cmx
-	ocamlopt -o $@ $^
+	ocamlopt -o $@ str.cmxa $^
 
 $(SRCDIR)/mlslLexer.ml: $(SRCDIR)/mlslLexer.mll
 	ocamllex $<

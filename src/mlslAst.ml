@@ -127,6 +127,12 @@ and pattern_kind =
 | PConstrP  of string * pattern
 
 type binop =
+| BOEq
+| BONeq
+| BOLe
+| BOLt
+| BOGe
+| BOGt
 | BOAdd
 | BOSub
 | BOMul
@@ -152,6 +158,7 @@ and expr_kind =
 | EInt      of int
 | ETrue
 | EFalse
+| EFloat    of float
 | ESwizzle  of expr * Swizzle.t
 | ERecord   of record_field_value list
 | ESelect   of expr * string
@@ -322,6 +329,12 @@ let rec string_of_typ p tp =
 
 let binop_name op =
 	match op with
+	| BOEq    -> "equality"
+	| BONeq   -> "inequality"
+	| BOLe    -> "less or equal test"
+	| BOLt    -> "less-then test"
+	| BOGe    -> "greater of equal test"
+	| BOGt    -> "greater-then test"
 	| BOAdd   -> "addition"
 	| BOSub   -> "subtraction"
 	| BOMul   -> "multiplication"

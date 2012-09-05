@@ -597,6 +597,9 @@ let rec unfold_code vertex code gamma expr =
 	| MlslAst.EInt n ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EInt.";
 		raise Unfold_exception
+	| MlslAst.EFloat f ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EFloat.";
+		raise Unfold_exception
 	| MlslAst.ETrue ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code ETrue.";
 		raise Unfold_exception
@@ -672,6 +675,24 @@ let rec unfold_code vertex code gamma expr =
 		| RVReg r1, RVReg r2 ->
 			let (rtp, ins) = 
 				match op with
+				| MlslAst.BOEq ->
+					Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EBinOp(BOEq, _, _)";
+					raise Unfold_exception
+				| MlslAst.BONeq ->
+					Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EBinOp(BONeq, _, _)";
+					raise Unfold_exception
+				| MlslAst.BOGe ->
+					Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EBinOp(BOLe, _, _)";
+					raise Unfold_exception
+				| MlslAst.BOLt ->
+					Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EBinOp(BOLt, _, _)";
+					raise Unfold_exception
+				| MlslAst.BOLe ->
+					Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EBinOp(BOGe, _, _)";
+					raise Unfold_exception
+				| MlslAst.BOGt ->
+					Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EBinOp(BOGt, _, _)";
+					raise Unfold_exception
 				| MlslAst.BOAdd ->
 					typ_and_ins_of_add expr.MlslAst.e_pos r1.var_typ r2.var_typ
 				| MlslAst.BOSub ->

@@ -52,6 +52,24 @@ let get_component pos value comp =
 
 let eval_binop pos op v1 v2 =
 	match op with
+	| MlslAst.BOEq ->
+		Errors.error_p pos "Unimpleneted: eval_binop BOEq";
+		raise Eval_exception
+	| MlslAst.BONeq ->
+		Errors.error_p pos "Unimpleneted: eval_binop BONeq";
+		raise Eval_exception
+	| MlslAst.BOLe ->
+		Errors.error_p pos "Unimpleneted: eval_binop BOLe";
+		raise Eval_exception
+	| MlslAst.BOLt ->
+		Errors.error_p pos "Unimpleneted: eval_binop BOLt";
+		raise Eval_exception
+	| MlslAst.BOGe ->
+		Errors.error_p pos "Unimpleneted: eval_binop BOGe";
+		raise Eval_exception
+	| MlslAst.BOGt ->
+		Errors.error_p pos "Unimpleneted: eval_binop BOGt";
+		raise Eval_exception
 	| MlslAst.BOAdd ->
 		begin match v1.TopDef.v_kind, v2.TopDef.v_kind with
 		| TopDef.VInt n1, TopDef.VInt n2 -> 
@@ -645,6 +663,8 @@ let rec eval gamma expr =
 		raise Eval_exception
 	| MlslAst.EInt n ->
 		TopDef.make_value pos (TopDef.VInt n)
+	| MlslAst.EFloat f ->
+		TopDef.make_value pos (TopDef.VFloat f)
 	| MlslAst.ETrue ->
 		TopDef.make_value pos (TopDef.VBool true)
 	| MlslAst.EFalse ->

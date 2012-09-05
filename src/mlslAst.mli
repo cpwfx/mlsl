@@ -63,6 +63,12 @@ and pattern_kind =
 | PConstrP  of string * pattern
 
 type binop =
+| BOEq
+| BONeq
+| BOLe
+| BOLt
+| BOGe
+| BOGt
 | BOAdd
 | BOSub
 | BOMul
@@ -88,6 +94,7 @@ and expr_kind =
 | EInt      of int
 | ETrue
 | EFalse
+| EFloat    of float
 | ESwizzle  of expr * Swizzle.t
 | ERecord   of record_field_value list
 | ESelect   of expr * string
