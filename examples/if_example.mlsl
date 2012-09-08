@@ -1,0 +1,28 @@
+
+const blue        : vec4
+const red         : vec4
+
+const projMatrix  : mat44
+
+attr POSITION pos : vec4
+
+let use_blue = true
+const use_red : bool
+
+let vertex vs =
+	{ position = projMatrix * pos
+	}
+
+(* This if-statement will be computed in compilation time, 
+ * so "red" branch will not be unfolded.
+ *)
+let fragment fs1 =
+	if use_blue then blue else red
+
+let shader if_example1 = (vs, fs1)
+	
+(* This if-statement will be computed in execution time *)
+let fragment fs2 =
+	if use_red then red else blue
+
+let shader if_example2 = (vs, fs2)

@@ -1,8 +1,9 @@
 (* File: midlang.mli *)
 
 type typ =
-| TFloat
+| TBool
 | TInt
+| TFloat
 | TMat of Misc.Dim.dim * Misc.Dim.dim
 | TVec of Misc.Dim.dim
 
@@ -97,11 +98,16 @@ type unop =
 | UONegV of Misc.Dim.dim
 
 type instr_kind =
-| IMov     of variable * variable
-| IBinOp   of variable * variable * variable * binop
-| IUnOp    of variable * variable * unop
-| ISwizzle of variable * variable * MlslAst.Swizzle.t
-| ITex     of variable * variable * sampler
+| IMov        of variable * variable
+| IConstBool  of variable * bool
+| IConstInt   of variable * int
+| IConstFloat of variable * float
+| IConstVec   of variable * Misc.Dim.dim * float array
+| IConstMat   of variable * Misc.Dim.dim * Misc.Dim.dim * float array array
+| IBinOp      of variable * variable * variable * binop
+| IUnOp       of variable * variable * unop
+| ISwizzle    of variable * variable * MlslAst.Swizzle.t
+| ITex        of variable * variable * sampler
 | IRet     of variable
 type instr =
 	{ ins_id   : int

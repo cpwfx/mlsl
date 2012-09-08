@@ -183,8 +183,9 @@ let map_variable var =
 			{ var_id         = Misc.Fresh.next fresh_var
 			; var_size       =
 				begin match var.Midlang.var_typ with
-				| Midlang.TFloat       -> (1, 1)
+				| Midlang.TBool        -> (1, 1)
 				| Midlang.TInt         -> (1, 1)
+				| Midlang.TFloat       -> (1, 1)
 				| Midlang.TMat(d1, d2) -> (Misc.Dim.int_of_dim d1, Misc.Dim.int_of_dim d2)
 				| Midlang.TVec d       -> (1, Misc.Dim.int_of_dim d)
 				end
@@ -332,7 +333,7 @@ let make_dest_comp comp reg =
 		| 1 -> dst_mask_y
 		| 2 -> dst_mask_z
 		| 3 -> dst_mask_w
-		| _ -> raise Misc.Internal_error
+		| _ -> raise (Misc.Internal_error (Printf.sprintf "Invalid component index: %d" comp))
 		end
 	}
 
@@ -345,7 +346,7 @@ let make_dest_comp_reg comp reg =
 		| 1 -> dst_mask_y
 		| 2 -> dst_mask_z
 		| 3 -> dst_mask_w
-		| _ -> raise Misc.Internal_error
+		| _ -> raise (Misc.Internal_error (Printf.sprintf "Invalid component index: %d" comp))
 		end
 	}
 
@@ -634,9 +635,7 @@ let build_ins globals ins =
 	match ins.Midlang.ins_kind with
 	| Midlang.IMov(dst, src) ->
 		begin match dst.Midlang.var_typ with
-		| Midlang.TFloat ->
-			Some [create_instr (IMov(make_dest_float dst, make_source src))]
-		| Midlang.TInt ->
+		| Midlang.TBool | Midlang.TInt | Midlang.TFloat ->
 			Some [create_instr (IMov(make_dest_float dst, make_source src))]
 		| Midlang.TMat(d1, d2) ->
 			Errors.error "Unimplemented: Agal.build_ins IMov mat.";
@@ -644,19 +643,34 @@ let build_ins globals ins =
 		| Midlang.TVec dim ->
 			Some [create_instr (IMov(make_dest dim dst, make_source src))]
 		end
+	| Midlang.IConstBool _ ->
+		Errors.error "Unimplemented: Agal.build_ins IConstBool.";
+		None
+	| Midlang.IConstInt _ ->
+		Errors.error "Unimplemented: Agal.build_ins IConstInt.";
+		None
+	| Midlang.IConstFloat _ ->
+		Errors.error "Unimplemented: Agal.build_ins IConstFloat.";
+		None
+	| Midlang.IConstVec _ ->
+		Errors.error "Unimplemented: Agal.build_ins IConstVec.";
+		None
+	| Midlang.IConstMat _ ->
+		Errors.error "Unimplemented: Agal.build_ins IConstMat.";
+		None
 	| Midlang.IBinOp(rv, r1, r2, op) ->
 		build_binop rv r1 r2 op
 	| Midlang.IUnOp(rv, r1, op) ->
 		build_unop rv r1 op
 	| Midlang.ISwizzle(dst, src, swizzle) ->
 		begin match dst.Midlang.var_typ with
-		| Midlang.TFloat | Midlang.TInt ->
+		| Midlang.TFloat | Midlang.TInt | Midlang.TBool ->
 			Some [create_instr 
 					(IMov(make_dest_float dst, make_swizzled_source src swizzle))]
 		| Midlang.TVec dim ->
 			Some [create_instr 
 					(IMov(make_dest dim dst, make_swizzled_source src swizzle))] 
-		| _ -> raise Misc.Internal_error
+		| _ -> raise (Misc.Internal_error "Invalid swizzle output type")
 		end
 	| Midlang.ITex(rv, vc, sam) ->
 		Some [create_instr 
@@ -1001,7 +1015,7 @@ let write_crs2_source out src dst_field =
 				;  src.src_swizzle.(3)
 				|]
 			| 2 -> src.src_swizzle
-			| _ -> raise Misc.Internal_error
+			| _ -> raise (Misc.Internal_error "Invalid cross product output field")
 		} in
 	write_source out real_src 0
 
@@ -1217,7 +1231,7 @@ let write_crs2_source_asm vertex src dst_field =
 				;  src.src_swizzle.(3)
 				|]
 			| 2 -> src.src_swizzle
-			| _ -> raise Misc.Internal_error
+			| _ -> raise (Misc.Internal_error "Invalid cross product output field")
 		} in
 	write_source_asm vertex real_src 0
 

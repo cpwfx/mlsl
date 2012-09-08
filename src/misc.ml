@@ -1,6 +1,6 @@
 (* File: misc.ml *)
 
-exception Internal_error
+exception Internal_error of string
 
 let fast_pow mul rcp id x n =
 	if n = 0 then id
@@ -238,6 +238,6 @@ module Opt = struct
 		| Some av -> Some (f av)
 	let value a =
 		match a with
-		| None -> raise Internal_error
+		| None -> raise (Internal_error "Opt.value None")
 		| Some av -> av
 end

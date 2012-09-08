@@ -9,6 +9,10 @@ module LiveVarTransfer : (Dataflow.BackwardsTransfer with type t = VarSet.t) = s
 	
 	let instr instr a =
 		match instr.Midlang.ins_kind with
+		| Midlang.IConstBool(rv, _) | Midlang.IConstInt(rv, _) 
+		| Midlang.IConstFloat(rv, _) | Midlang.IConstVec(rv, _, _) 
+		| Midlang.IConstMat(rv, _, _, _) ->
+			VarSet.remove rv a
 		| Midlang.IMov(rv, rs) | Midlang.IUnOp(rv, rs, _) 
 		| Midlang.ISwizzle(rv, rs, _) | Midlang.ITex(rv, rs, _) -> 
 			VarSet.add rs (VarSet.remove rv a)

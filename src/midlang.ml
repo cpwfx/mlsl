@@ -9,8 +9,9 @@ let var_fresh     = Misc.Fresh.create ()
 let sampler_fresh = Misc.Fresh.create ()
 
 type typ =
-| TFloat
+| TBool
 | TInt
+| TFloat
 | TMat  of dim * dim
 | TVec  of dim
 
@@ -105,12 +106,17 @@ type unop =
 | UONegV of dim
 
 type instr_kind =
-| IMov     of variable * variable
-| IBinOp   of variable * variable * variable * binop
-| IUnOp    of variable * variable * unop
-| ISwizzle of variable * variable * MlslAst.Swizzle.t
-| ITex     of variable * variable * sampler
-| IRet     of variable
+| IMov        of variable * variable
+| IConstBool  of variable * bool
+| IConstInt   of variable * int
+| IConstFloat of variable * float
+| IConstVec   of variable * dim * float array
+| IConstMat   of variable * dim * dim * float array array
+| IBinOp      of variable * variable * variable * binop
+| IUnOp       of variable * variable * unop
+| ISwizzle    of variable * variable * MlslAst.Swizzle.t
+| ITex        of variable * variable * sampler
+| IRet        of variable
 type instr =
 	{ ins_id   : int
 	; ins_kind : instr_kind
@@ -134,8 +140,9 @@ type shader =
 
 let string_of_typ tp =
 	match tp with
-	| TFloat       -> "float"
+	| TBool        -> "bool"
 	| TInt         -> "int"
+	| TFloat       -> "float"
 	| TMat(d1, d2) -> Printf.sprintf "mat%d%d" (int_of_dim d1) (int_of_dim d2)
 	| TVec d       -> Printf.sprintf "vec%d" (int_of_dim d)
 
@@ -145,7 +152,7 @@ let vectyp_of_int n =
 	| 2 -> TVec Dim2
 	| 3 -> TVec Dim3
 	| 4 -> TVec Dim4
-	| _ -> raise Misc.Internal_error
+	| _ -> raise (Misc.Internal_error (Printf.sprintf "Invalid vector size: %d" n))
 
 (* ========================================================================= *)
 
@@ -153,14 +160,15 @@ let create_var_ast sort ast_typ =
 	{ var_id = Misc.Fresh.next var_fresh
 	; var_typ =
 		begin match ast_typ with
-		| MlslAst.TFloat -> TFloat
+		| MlslAst.TBool  -> TBool
 		| MlslAst.TInt   -> TInt
+		| MlslAst.TFloat -> TFloat
 		| MlslAst.TMat(d1, d2) -> TMat(d1, d2)
 		| MlslAst.TVec d       -> TVec d
-		| MlslAst.TBool | MlslAst.TSampler2D | MlslAst.TSamplerCube 
+		| MlslAst.TSampler2D | MlslAst.TSamplerCube 
 		| MlslAst.TUnit | MlslAst.TArrow _ | MlslAst.TPair _
 		| MlslAst.TRecord _ | MlslAst.TVertex _ | MlslAst.TFragment _
-		| MlslAst.TVertexTop -> raise Misc.Internal_error
+		| MlslAst.TVertexTop -> raise (Misc.Internal_error "Variable of invalid type.")
 		end
 	; var_sort = sort
 	}
@@ -178,7 +186,7 @@ let create_sampler_ast name typ =
 		begin match typ with
 		| MlslAst.TSampler2D   -> SDim2D
 		| MlslAst.TSamplerCube -> SDimCube
-		| _ -> raise Misc.Internal_error
+		| _ -> raise (Misc.Internal_error "Sampler of invalid type.")
 		end
 	}
 
@@ -253,71 +261,180 @@ let create_sampler_list () =
 
 (* ========================================================================= *)
 
+type program_type =
+| PVertex
+| PFragment
+
 type reg_value =
-	{ rv_pos  : Errors.position
-	; rv_kind : reg_value_kind
+	{         rv_pos  : Errors.position
+	; mutable rv_kind : reg_value_kind option
 	}
 and reg_value_kind =
 | RVReg        of variable
 | RVRecord     of reg_value StrMap.t
 | RVSampler    of sampler
+| RVPair       of reg_value * reg_value
 | RVFunc       of reg_value StrMap.t * MlslAst.pattern * MlslAst.expr
+| RVIfFunc     of variable * reg_value * reg_value
 | RVValue      of TopDef.value
-| RVShDepValue of TopDef.value
+
+let make_reg_value pos kind =
+	{ rv_pos  = pos
+	; rv_kind = Some kind
+	}
+
+let reg_value_of_value value =
+	{ rv_pos  = value.TopDef.v_pos
+	; rv_kind = Some (RVValue value)
+	}
+
+let make_value pos kind =
+	{ rv_pos  = pos
+	; rv_kind = Some (RVValue (TopDef.make_value pos kind))
+	}
 
 exception Unfold_exception
 
-let rec regval_of_value code value =
-	{ rv_pos = value.TopDef.v_pos
-	; rv_kind =
-		begin match value.TopDef.v_kind with
-		| TopDef.VAttr _ | TopDef.VConst _ | TopDef.VSampler _ ->
-			RVShDepValue value
-		| TopDef.VFragment _ | TopDef.VVertex _ -> RVValue value
-		| TopDef.VBool _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VBool.";
-			RVValue value
-		| TopDef.VInt _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VInt.";
-			RVValue value
-		| TopDef.VFloat _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VFloat.";
-			RVValue value
-		| TopDef.VVec _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VVec.";
-			RVValue value
-		| TopDef.VMat _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VMat.";
-			RVValue value
-		| TopDef.VRecord _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VRecord.";
-			RVValue value
-		| TopDef.VConstrU _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VConstrU.";
-			RVValue value
-		| TopDef.VConstrP _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VConstrP.";
-			RVValue value
-		| TopDef.VPair _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VPair.";
-			RVValue value
-		| TopDef.VFunc(closure, pat, body) ->
-			RVFunc(StrMap.map (regval_of_value code) closure, pat, body)
-		| TopDef.VFixed _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: regval_of_value VFixed.";
-			RVValue value
-		end
-	}
-			
+let reg_value_kind pos rv =
+	match rv.rv_kind with
+	| None ->
+		Errors.error_p pos "Ivalid fixpoint: This value (defined at %s) was used during its evaluation."
+			(Errors.string_of_pos rv.rv_pos);
+		raise Unfold_exception
+	| Some kind -> kind
+
+let reg_value_kind_of_attr pos program_type name semantics typ =
+	match program_type with
+	| PVertex ->
+		RVReg (
+			try
+				Hashtbl.find attr_map name
+			with
+			| Not_found ->
+				let v = create_var_ast VSAttribute typ.MlslAst.tt_typ in
+				Hashtbl.add attr_map name v;
+				v
+			)
+	| PFragment ->
+		Errors.error_p pos "Attributes are not available for fragment programs.";
+		raise Unfold_exception
+
+let reg_value_kind_of_const pos program_type name typ =
+	let const_map =
+		match program_type with
+		| PVertex -> v_const_map
+		| PFragment -> f_const_map
+	in
+	RVReg (
+		try
+			Hashtbl.find const_map name
+		with
+		| Not_found ->
+			let v = create_var_ast VSConstant typ.MlslAst.tt_typ in
+			Hashtbl.add const_map name v;
+			v
+		)
+
+let reg_value_kind_of_sampler pos program_type name typ =
+	match program_type with
+	| PVertex -> 
+		Errors.error_p pos "Samplers are not available for vertex programs.";
+		raise Unfold_exception
+	| PFragment ->
+		RVSampler (
+			try
+				Hashtbl.find sampler_map name
+			with
+			| Not_found ->
+				let v = create_sampler_ast name typ.MlslAst.tt_typ in
+				Hashtbl.add sampler_map name v;
+				v
+			)
+
+let const_or_reg_value_kind pos program_type rv =
+	let kind = reg_value_kind pos rv in
+	match kind with
+	| RVReg _ | RVRecord _ | RVSampler _ | RVPair _ | RVFunc _ | RVIfFunc _ -> kind
+	| RVValue value ->
+	begin match value.TopDef.v_kind with
+	| TopDef.VAttr(name, semantics, typ) ->
+		reg_value_kind_of_attr pos program_type name semantics typ
+	| TopDef.VConst(name, typ) ->
+		reg_value_kind_of_const pos program_type name typ
+	| TopDef.VSampler(name, typ) ->
+		reg_value_kind_of_sampler pos program_type name typ
+	| TopDef.VFragment _ | TopDef.VVertex _ | TopDef.VBool _ | TopDef.VInt _ 
+	| TopDef.VFloat _ | TopDef.VVec _ | TopDef.VMat _ | TopDef.VRecord _ 
+	| TopDef.VPair _ | TopDef.VFunc _ | TopDef.VConstrU _ | TopDef.VConstrP _ -> kind
+	| TopDef.VFixed _ ->
+		Errors.error_p pos "Unimplemented: constr_or_reg_value_kind VFixed.";
+		raise Unfold_exception
+	end
+
+let concrete_reg_value_kind pos program_type code rv =
+	let kind = reg_value_kind pos rv in
+	match kind with
+	| RVReg _ | RVRecord _ | RVSampler _ | RVPair _ | RVFunc _ | RVIfFunc _ -> kind
+	| RVValue value ->
+	begin match value.TopDef.v_kind with
+	| TopDef.VAttr(name, semantics, typ) ->
+		reg_value_kind_of_attr pos program_type name semantics typ
+	| TopDef.VConst(name, typ) ->
+		reg_value_kind_of_const pos program_type name typ
+	| TopDef.VSampler(name, typ) ->
+		reg_value_kind_of_sampler pos program_type name typ
+	| TopDef.VFragment _ ->
+		Errors.error_p pos "Fragment program can not be a concrete value.";
+		raise Unfold_exception
+	| TopDef.VVertex _ ->
+		Errors.error_p pos "Vertex program can not be a concrete value.";
+		raise Unfold_exception
+	| TopDef.VBool b ->
+		let rreg = create_variable VSTemporary TBool in
+		Misc.ImpList.add code (create_instr (IConstBool(rreg, b)));
+		RVReg rreg
+	| TopDef.VInt n ->
+		let rreg = create_variable VSTemporary TInt in
+		Misc.ImpList.add code (create_instr (IConstInt(rreg, n)));
+		RVReg rreg
+	| TopDef.VFloat f ->
+		let rreg = create_variable VSTemporary TFloat in
+		Misc.ImpList.add code (create_instr (IConstFloat(rreg, f)));
+		RVReg rreg
+	| TopDef.VVec(dim, v) ->
+		let rreg = create_variable VSTemporary (TVec dim) in
+		Misc.ImpList.add code (create_instr (IConstVec(rreg, dim, v)));
+		RVReg rreg
+	| TopDef.VMat(d1, d2, m) ->
+		let rreg = create_variable VSTemporary (TMat(d1, d2)) in
+		Misc.ImpList.add code (create_instr (IConstMat(rreg, d1, d2, m)));
+		RVReg rreg
+	| TopDef.VRecord rd ->
+		RVRecord (StrMap.map reg_value_of_value rd)
+	| TopDef.VPair(v1, v2) ->
+		RVPair(reg_value_of_value v1, reg_value_of_value v2)
+	| TopDef.VFunc(closure, pat, body) ->
+		RVFunc(StrMap.map reg_value_of_value closure, pat, body)
+	| TopDef.VConstrU _ ->
+		Errors.error_p pos "Unimplemented: concrete_reg_value_kind VConstrU";
+		raise Unfold_exception
+	| TopDef.VConstrP _ ->
+		Errors.error_p pos "Unimplemented: concrete_reg_value_kind VConstrP";
+		raise Unfold_exception
+	| TopDef.VFixed vr ->
+		Errors.error_p pos "Unimplemented: concrete_reg_value_kind VFixed";
+		raise Unfold_exception
+	end
 
 let string_of_rvkind kind =
 	match kind with
 	| RVReg _        -> "data type value"
 	| RVRecord _     -> "record"
+	| RVPair _       -> "pair"
 	| RVSampler _    -> "sampler"
 	| RVFunc _       -> "function"
+	| RVIfFunc _     -> "function with condition"
 	| RVValue _      -> "high level value"
-	| RVShDepValue _ -> "shader dependent value"
 
 let cast_regval_to_type pos code rv tp =
 	Errors.error_p pos "Unimpleneted: cast_regval_to_type.";
@@ -480,188 +597,305 @@ let typ_and_ins_of_uplus pos tp =
 			(string_of_typ tp);
 		raise Unfold_exception
 
-let shader_dependent_value pos code vertex value =
-	{ rv_pos  = value.TopDef.v_pos
-	; rv_kind =
-		begin match value.TopDef.v_kind with
-		| TopDef.VAttr(name, semantics, typ) ->
-			if vertex then
-				RVReg (
-					try
-						Hashtbl.find attr_map name
-					with
-					| Not_found ->
-						let v = create_var_ast VSAttribute typ.MlslAst.tt_typ in
-						Hashtbl.add attr_map name v;
-						v
-					)
-			else begin
-				Errors.error_p pos "Attributes are not available for fragment shaders.";
-				raise Unfold_exception
-			end
-		| TopDef.VConst(name, typ) ->
-			let const_map = if vertex then v_const_map else f_const_map in
-			RVReg (
-				try
-					Hashtbl.find const_map name
-				with
-				| Not_found ->
-					let v = create_var_ast VSConstant typ.MlslAst.tt_typ in
-					Hashtbl.add const_map name v;
-					v
-				)
-		| TopDef.VSampler(name, typ) ->
-			RVSampler (
-				try
-					Hashtbl.find sampler_map name
-				with
-				| Not_found ->
-					let v = create_sampler_ast name typ.MlslAst.tt_typ in
-					Hashtbl.add sampler_map name v;
-					v
-				)
-		| TopDef.VFragment _ | TopDef.VVertex _ -> RVValue value
-		| TopDef.VBool _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VBool.";
-			RVValue value
-		| TopDef.VInt _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VInt.";
-			RVValue value
-		| TopDef.VFloat _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VFloat.";
-			RVValue value
-		| TopDef.VVec _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VVec.";
-			RVValue value
-		| TopDef.VMat _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VMat.";
-			RVValue value
-		| TopDef.VRecord _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VRecord.";
-			RVValue value
-		| TopDef.VPair _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VPair.";
-			RVValue value
-		| TopDef.VFunc(closure, pat, body) ->
-			RVFunc(StrMap.map (regval_of_value code) closure, pat, body)
-		| TopDef.VConstrP _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VConstrP.";
-			RVValue value
-		| TopDef.VConstrU _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VConstrU.";
-			RVValue value
-		| TopDef.VFixed _ ->
-			Errors.error_p value.TopDef.v_pos "Unimplemented: shader_dependent_value VFixed.";
-			RVValue value
-		end
-	}
-
-let unfold_code_var vertex code gamma expr x =
-	if StrMap.mem x gamma then begin 
-		try
-			let rv = StrMap.find x gamma in
-			match rv.rv_kind with
-			| RVShDepValue value ->
-				shader_dependent_value expr.MlslAst.e_pos code vertex value
-			| _ -> rv
-		with
-		| Not_found ->
+let unfold_code_var gamma expr x =
+	try
+		StrMap.find x gamma
+	with
+	| Not_found ->
+		begin match TopDef.check_name x with
+		| None ->
 			Errors.error_p expr.MlslAst.e_pos "Unbound variable %s" x;
 			raise Unfold_exception
-	end else begin match TopDef.check_name x with
-	| None ->
-		Errors.error_p expr.MlslAst.e_pos "Internal error!!!";
-		raise Misc.Internal_error
-	| Some value ->
-		shader_dependent_value expr.MlslAst.e_pos code vertex value
-	end
+		| Some value -> reg_value_of_value value
+		end
 
-let rec unfold_code vertex code gamma expr =
-	match expr.MlslAst.e_kind with
-	| MlslAst.EVar x ->
-		unfold_code_var vertex code gamma expr x
-	| MlslAst.EVarying x ->
-		if vertex then begin
-			Errors.error_p expr.MlslAst.e_pos "Varying variables are not allowed in vertex shaders.";
-			raise Unfold_exception
-		end else begin try
-			let vr = Hashtbl.find varying_map x in
-				{ rv_pos  = expr.MlslAst.e_pos
-				; rv_kind = RVReg vr
-				}
-		with
-		| Not_found ->
-			Errors.error_p expr.MlslAst.e_pos "Undefinded varying variable $%s." x;
+let make_varying pos program_type name =
+	match program_type with
+	| PVertex ->
+		Errors.error_p pos "Varying variables are not allowed in vertex programs.";
+		raise Unfold_exception
+	| PFragment ->
+		begin try
+			let vr = Hashtbl.find varying_map name in
+				make_reg_value pos (RVReg vr)
+			with
+			| Not_found ->
+				Errors.error_p pos "Undefinded varying variable $%s." name;
+				raise Unfold_exception
+		end
+
+let unfold_swizzle pos program_type code rv swizzle =
+	match const_or_reg_value_kind pos program_type rv with
+	| RVReg rvreg ->
+		begin match rvreg.var_typ with
+		| TInt | TFloat ->
+			if MlslAst.Swizzle.max_component_id swizzle = 0 then
+				let rreg = create_variable VSTemporary 
+					(vectyp_of_int (MlslAst.Swizzle.size swizzle)) in
+				Misc.ImpList.add code 
+					(create_instr (ISwizzle(rreg, rvreg, swizzle)));
+				make_reg_value pos (RVReg rreg)
+			else begin
+				Errors.error_p pos
+					"Value defined at %s has type float, can not be swizzled using pattern %s."
+					(Errors.string_of_pos rv.rv_pos)
+					(MlslAst.Swizzle.to_string swizzle);
+				raise Unfold_exception
+			end
+		| TVec d ->
+			if MlslAst.Swizzle.max_component_id swizzle < int_of_dim d then
+				let rreg = create_variable VSTemporary 
+					(vectyp_of_int (MlslAst.Swizzle.size swizzle)) in
+				Misc.ImpList.add code 
+					(create_instr (ISwizzle(rreg, rvreg, swizzle)));
+				make_reg_value pos (RVReg rreg)
+			else begin
+				Errors.error_p pos
+					"Value defined at %s has type %s, can not be swizzled using pattern %s."
+					(Errors.string_of_pos rv.rv_pos)
+					(string_of_typ rvreg.var_typ)
+					(MlslAst.Swizzle.to_string swizzle);
+				raise Unfold_exception
+			end
+		| tp ->
+			Errors.error_p pos "Value defined at %s has type %s, can not be swizzled."
+				(Errors.string_of_pos rv.rv_pos)
+				(string_of_typ tp);
 			raise Unfold_exception
 		end
-	| MlslAst.EInt n ->
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EInt.";
+	| RVValue value ->
+		EvalPrim.with_exn Unfold_exception (fun () ->
+			reg_value_of_value (EvalPrim.eval_swizzle pos value swizzle)
+		)
+	| kind ->
+		Errors.error_p pos
+			"Value defined at %s is a %s, can not be swizzled."
+			(Errors.string_of_pos rv.rv_pos)
+			(string_of_rvkind kind);
 		raise Unfold_exception
-	| MlslAst.EFloat f ->
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EFloat.";
+
+let register_of_const_or_reg pos code kind =
+	match kind with
+	| RVReg reg -> reg
+	| RVValue value ->
+		begin match value.TopDef.v_kind with
+		| TopDef.VBool b ->
+			let rreg = create_variable VSTemporary TBool in
+			Misc.ImpList.add code (create_instr (IConstBool(rreg, b)));
+			rreg
+		| TopDef.VInt n ->
+			let rreg = create_variable VSTemporary TInt in
+			Misc.ImpList.add code (create_instr (IConstInt(rreg, n)));
+			rreg
+		| TopDef.VFloat f ->
+			let rreg = create_variable VSTemporary TFloat in
+			Misc.ImpList.add code (create_instr (IConstFloat(rreg, f)));
+			rreg
+		| TopDef.VVec(dim, v) ->
+			let rreg = create_variable VSTemporary (TVec dim) in
+			Misc.ImpList.add code (create_instr (IConstVec(rreg, dim, v)));
+			rreg
+		| TopDef.VMat(d1, d2, m) ->
+			let rreg = create_variable VSTemporary (TMat(d1, d2)) in
+			Misc.ImpList.add code (create_instr (IConstMat(rreg, d1, d2, m)));
+			rreg
+		| _ ->
+			Errors.error_p pos "Value defined at %s is not a primitive value."
+				(Errors.string_of_pos value.TopDef.v_pos);
+			raise Unfold_exception
+		end
+	| _ ->
+		Errors.error_p pos "This is not a primitive value.";
 		raise Unfold_exception
-	| MlslAst.ETrue ->
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code ETrue.";
+
+let unfold_binop pos program_type code op rkind1 rkind2 =
+	match rkind1, rkind2 with
+	| RVValue v1, RVValue v2 ->
+		EvalPrim.with_exn Unfold_exception (fun () ->
+			reg_value_of_value (EvalPrim.eval_binop pos op v1 v2)
+		)
+	| _ ->
+		let r1 = register_of_const_or_reg pos code rkind1 in
+		let r2 = register_of_const_or_reg pos code rkind2 in
+		let (rtp, ins) = 
+			match op with
+			| MlslAst.BOEq ->
+				Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOEq, _, _)";
+				raise Unfold_exception
+			| MlslAst.BONeq ->
+				Errors.error_p pos "Unimplemented: unfold_code EBinOp(BONeq, _, _)";
+				raise Unfold_exception
+			| MlslAst.BOGe ->
+				Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOLe, _, _)";
+				raise Unfold_exception
+			| MlslAst.BOLt ->
+				Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOLt, _, _)";
+				raise Unfold_exception
+			| MlslAst.BOLe ->
+				Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOGe, _, _)";
+				raise Unfold_exception
+			| MlslAst.BOGt ->
+				Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOGt, _, _)";
+				raise Unfold_exception
+			| MlslAst.BOAdd ->
+				typ_and_ins_of_add pos r1.var_typ r2.var_typ
+			| MlslAst.BOSub ->
+				typ_and_ins_of_sub pos r1.var_typ r2.var_typ
+			| MlslAst.BOMul -> 
+				typ_and_ins_of_mul pos r1.var_typ r2.var_typ
+			| MlslAst.BODiv ->
+				typ_and_ins_of_div pos r1.var_typ r2.var_typ
+			| MlslAst.BOMod ->
+				typ_and_ins_of_mod pos r1.var_typ r2.var_typ
+			| MlslAst.BODot ->
+				typ_and_ins_of_dot pos r1.var_typ r2.var_typ
+			| MlslAst.BOCross ->
+				typ_and_ins_of_cross pos r1.var_typ r2.var_typ
+			| MlslAst.BOPow ->
+				typ_and_ins_of_pow pos r1.var_typ r2.var_typ
+			| MlslAst.BOMin ->
+				typ_and_ins_of_min pos r1.var_typ r2.var_typ
+		in
+		let rreg = create_variable VSTemporary rtp in
+		Misc.ImpList.add code (create_instr (ins rreg r1 r2));
+		make_reg_value pos (RVReg rreg)
+
+let unfold_unop pos program_type code op kind =
+	match kind with
+	| RVValue value ->
+		EvalPrim.with_exn Unfold_exception (fun () ->
+			reg_value_of_value (EvalPrim.eval_unop pos op value)
+		)
+	| RVReg r ->
+		let (rtp, ins) =
+			match op with
+			| MlslAst.UONeg ->
+				typ_and_ins_of_neg pos r.var_typ
+			| MlslAst.UOPlus ->
+				typ_and_ins_of_uplus pos r.var_typ
+		in
+		let rreg = create_variable VSTemporary rtp in
+		Misc.ImpList.add code (create_instr (ins rreg r));
+		make_reg_value pos (RVReg rreg)
+	| kind ->
+		Errors.error_p pos 
+			"Operand of %s can not be a %s."
+			(MlslAst.unop_name op)
+			(string_of_rvkind kind);
 		raise Unfold_exception
-	| MlslAst.EFalse ->
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EFalse.";
+
+let rec merge_if_branches pos program_type code cond_var result1 result2 =
+	let rv1 = concrete_reg_value_kind pos program_type code result1 in
+	let rv2 = concrete_reg_value_kind pos program_type code result2 in
+	match rv1, rv2 with
+	| _ ->
+		Errors.error_p pos "Unimplemented: merge_if_branches.";
 		raise Unfold_exception
-	| MlslAst.ESwizzle(e, swizzle) ->
-		let rv = unfold_code vertex code gamma e in
-		begin match rv.rv_kind with
-		| RVReg rvreg ->
-			begin match rvreg.var_typ with
-			| TFloat ->
-				if MlslAst.Swizzle.max_component_id swizzle = 0 then
-					let rreg = create_variable VSTemporary 
-						(vectyp_of_int (MlslAst.Swizzle.size swizzle)) in
-					Misc.ImpList.add code 
-						(create_instr (ISwizzle(rreg, rvreg, swizzle)));
-					{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }
-				else begin
-					Errors.error_p expr.MlslAst.e_pos
-						"Value defined at %s has type float, can not be swizzled using pattern %s."
-						(Errors.string_of_pos rv.rv_pos)
-						(MlslAst.Swizzle.to_string swizzle);
-					raise Unfold_exception
-				end
-			| TVec d ->
-				if MlslAst.Swizzle.max_component_id swizzle < int_of_dim d then
-					let rreg = create_variable VSTemporary 
-						(vectyp_of_int (MlslAst.Swizzle.size swizzle)) in
-					Misc.ImpList.add code 
-						(create_instr (ISwizzle(rreg, rvreg, swizzle)));
-					{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }
-				else begin
-					Errors.error_p expr.MlslAst.e_pos
-						"Value defined at %s has type %s, can not be swizzled using pattern %s."
-						(Errors.string_of_pos rv.rv_pos)
-						(string_of_typ rvreg.var_typ)
-						(MlslAst.Swizzle.to_string swizzle);
-					raise Unfold_exception
-				end
+
+let rec unfold_if_statement pos program_type code gamma cnd e1 e2 =
+	let rvcnd = unfold_code program_type code gamma cnd in
+	match const_or_reg_value_kind pos program_type rvcnd with
+	| RVReg reg ->
+		begin match reg.var_typ with
+		| TBool ->
+			let result1 = unfold_code program_type code gamma e1 in
+			let result2 = unfold_code program_type code gamma e2 in
+			merge_if_branches pos program_type code reg result1 result2
+		| typ ->
+			Errors.error_p pos 
+				"Condition in if-statement defined at %s has type %s, but expected bool."
+				(Errors.string_of_pos rvcnd.rv_pos)
+				(string_of_typ typ);
+			raise Unfold_exception
+		end
+	| RVValue value ->
+		begin match value.TopDef.v_kind with
+		| TopDef.VBool b ->
+			unfold_code program_type code gamma (if b then e1 else e2)
+		| kind ->
+			Errors.error_p pos 
+				"Condition in if-statement defined at %s is a %s, but expected boolean value."
+				(Errors.string_of_pos rvcnd.rv_pos)
+				(TopDef.string_of_value_kind kind);
+			raise Unfold_exception
+		end
+	| kind ->
+		Errors.error_p pos 
+			"Condition in if-statement defined at %s is a %s, but expected boolean value."
+			(Errors.string_of_pos rvcnd.rv_pos)
+			(string_of_rvkind kind);
+		raise Unfold_exception
+
+and unfold_app pos program_type code gamma func arg =
+	match concrete_reg_value_kind pos program_type code func with
+	| RVSampler sampler ->
+		begin match concrete_reg_value_kind pos program_type code arg with
+		| RVReg coordreg ->
+			begin match coordreg.var_typ with
+			| TVec Dim2 ->
+				let rreg = create_variable VSTemporary (TVec Dim4) in
+				Misc.ImpList.add code 
+					(create_instr (ITex(rreg, coordreg, sampler)));
+				make_reg_value pos (RVReg rreg)
 			| tp ->
-				Errors.error_p expr.MlslAst.e_pos
-					"Value defined at %s has type %s, can not be swizzled."
-					(Errors.string_of_pos rv.rv_pos)
+				Errors.error_p pos
+					"Texture coordinates defined at %s have type %s, but expected vec2."
+					(Errors.string_of_pos arg.rv_pos)
 					(string_of_typ tp);
 				raise Unfold_exception
 			end
 		| kind ->
-			Errors.error_p expr.MlslAst.e_pos
-				"Value defined at %s is a %s, can not be swizzled."
-				(Errors.string_of_pos rv.rv_pos)
+			Errors.error_p pos
+				"Value defined at %s is a %s, can not be used as texture coordinates."
+				(Errors.string_of_pos arg.rv_pos)
 				(string_of_rvkind kind);
 			raise Unfold_exception
 		end
+	| RVFunc(closure, pat, body) ->
+		if !credits <= 0 then begin
+			Errors.error_p pos
+				"Too complex functional code. Unfolding requires more than 1024 function applications.";
+			raise Unfold_exception
+		end else begin
+			credits := !credits - 1;
+			let gamma = bind_pattern code closure pat arg in
+			unfold_code program_type code gamma body
+		end
+	| RVIfFunc(cond_var, func1, func2) ->
+		let result1 = unfold_app pos program_type code gamma func1 arg in
+		let result2 = unfold_app pos program_type code gamma func2 arg in
+		merge_if_branches pos program_type code cond_var result1 result2
+	| _ ->
+		Errors.error_p pos
+			"Value defined at %s is not a function/sampler, can not be applied."
+			(Errors.string_of_pos func.rv_pos);
+			raise Unfold_exception
+
+and unfold_code program_type code gamma expr =
+	match expr.MlslAst.e_kind with
+	| MlslAst.EVar x ->
+		unfold_code_var gamma expr x
+	| MlslAst.EVarying x ->
+		make_varying expr.MlslAst.e_pos program_type x
+	| MlslAst.EInt n ->
+		make_value expr.MlslAst.e_pos (TopDef.VInt n)
+	| MlslAst.EFloat f ->
+		make_value expr.MlslAst.e_pos (TopDef.VFloat f)
+	| MlslAst.ETrue ->
+		make_value expr.MlslAst.e_pos (TopDef.VBool true)
+	| MlslAst.EFalse ->
+		make_value expr.MlslAst.e_pos (TopDef.VBool false)
+	| MlslAst.ESwizzle(e, swizzle) ->
+		let rv = unfold_code program_type code gamma e in
+		unfold_swizzle expr.MlslAst.e_pos program_type code rv swizzle
 	| MlslAst.ERecord rd ->
 		let rd' =
 			List.fold_left (fun regMap field ->
-				let rv = unfold_code vertex code gamma field.MlslAst.rfv_value in
+				let rv = unfold_code program_type code gamma field.MlslAst.rfv_value in
 					StrMap.add field.MlslAst.rfv_name rv regMap
 				) StrMap.empty rd
 		in
-			{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVRecord rd' }
+			make_reg_value expr.MlslAst.e_pos (RVRecord rd')
 	| MlslAst.ESelect(e, field) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code ESelect.";
 		raise Unfold_exception
@@ -669,145 +903,30 @@ let rec unfold_code vertex code gamma expr =
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EPair.";
 		raise Unfold_exception
 	| MlslAst.EBinOp(op, e1, e2) ->
-		let rv1 = unfold_code vertex code gamma e1 in
-		let rv2 = unfold_code vertex code gamma e2 in
-		begin match rv1.rv_kind, rv2.rv_kind with
-		| RVReg r1, RVReg r2 ->
-			let (rtp, ins) = 
-				match op with
-				| MlslAst.BOEq ->
-					Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EBinOp(BOEq, _, _)";
-					raise Unfold_exception
-				| MlslAst.BONeq ->
-					Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EBinOp(BONeq, _, _)";
-					raise Unfold_exception
-				| MlslAst.BOGe ->
-					Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EBinOp(BOLe, _, _)";
-					raise Unfold_exception
-				| MlslAst.BOLt ->
-					Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EBinOp(BOLt, _, _)";
-					raise Unfold_exception
-				| MlslAst.BOLe ->
-					Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EBinOp(BOGe, _, _)";
-					raise Unfold_exception
-				| MlslAst.BOGt ->
-					Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EBinOp(BOGt, _, _)";
-					raise Unfold_exception
-				| MlslAst.BOAdd ->
-					typ_and_ins_of_add expr.MlslAst.e_pos r1.var_typ r2.var_typ
-				| MlslAst.BOSub ->
-					typ_and_ins_of_sub expr.MlslAst.e_pos r1.var_typ r2.var_typ
-				| MlslAst.BOMul -> 
-					typ_and_ins_of_mul expr.MlslAst.e_pos r1.var_typ r2.var_typ
-				| MlslAst.BODiv ->
-					typ_and_ins_of_div expr.MlslAst.e_pos r1.var_typ r2.var_typ
-				| MlslAst.BOMod ->
-					typ_and_ins_of_mod expr.MlslAst.e_pos r1.var_typ r2.var_typ
-				| MlslAst.BODot ->
-					typ_and_ins_of_dot expr.MlslAst.e_pos r1.var_typ r2.var_typ
-				| MlslAst.BOCross ->
-					typ_and_ins_of_cross expr.MlslAst.e_pos r1.var_typ r2.var_typ
-				| MlslAst.BOPow ->
-					typ_and_ins_of_pow expr.MlslAst.e_pos r1.var_typ r2.var_typ
-				| MlslAst.BOMin ->
-					typ_and_ins_of_min expr.MlslAst.e_pos r1.var_typ r2.var_typ
-			in
-			let rreg = create_variable VSTemporary rtp in
-			Misc.ImpList.add code (create_instr (ins rreg r1 r2));
-			{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }
-		| RVReg _, _ ->
-			Errors.error_p expr.MlslAst.e_pos 
-				"Second operand of %s defined at %s can not be a %s."
-				(MlslAst.binop_name op)
-				(Errors.string_of_pos rv2.rv_pos)
-				(string_of_rvkind rv2.rv_kind);
-			raise Unfold_exception
-		| _ ->
-			Errors.error_p expr.MlslAst.e_pos 
-				"First operand of %s defined at %s can not be a %s."
-				(MlslAst.binop_name op)
-				(Errors.string_of_pos rv1.rv_pos)
-				(string_of_rvkind rv1.rv_kind);
-			raise Unfold_exception
-		end
+		let rv1 = unfold_code program_type code gamma e1 in
+		let rv2 = unfold_code program_type code gamma e2 in
+		unfold_binop expr.MlslAst.e_pos program_type code op
+			(const_or_reg_value_kind e1.MlslAst.e_pos program_type rv1)
+			(const_or_reg_value_kind e2.MlslAst.e_pos program_type rv2)
 	| MlslAst.EUnOp(op, e) ->
-		let rv = unfold_code vertex code gamma e in
-		begin match rv.rv_kind with
-		| RVReg r ->
-			let (rtp, ins) =
-				match op with
-				| MlslAst.UONeg ->
-					typ_and_ins_of_neg expr.MlslAst.e_pos r.var_typ
-				| MlslAst.UOPlus ->
-					typ_and_ins_of_uplus expr.MlslAst.e_pos r.var_typ
-			in
-			let rreg = create_variable VSTemporary rtp in
-			Misc.ImpList.add code (create_instr (ins rreg r));
-			{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }
-		| _ ->
-			Errors.error_p expr.MlslAst.e_pos 
-				"First operand of %s defined at %s can not be a %s."
-				(MlslAst.unop_name op)
-				(Errors.string_of_pos rv.rv_pos)
-				(string_of_rvkind rv.rv_kind);
-			raise Unfold_exception
-		end
+		let rv = unfold_code program_type code gamma e in
+		unfold_unop expr.MlslAst.e_pos program_type code op
+			(const_or_reg_value_kind e.MlslAst.e_pos program_type rv)
 	| MlslAst.EAbs(pat, e) ->
-		{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVFunc(gamma, pat, e) }
+		make_reg_value expr.MlslAst.e_pos (RVFunc(gamma, pat, e))
 	| MlslAst.EApp(e1, e2) ->
-		let func  = unfold_code vertex code gamma e1 in
-		let rvarg = unfold_code vertex code gamma e2 in
-		begin match func.rv_kind with
-		| RVSampler sampler ->
-			begin match rvarg.rv_kind with
-			| RVReg coordreg ->
-				begin match coordreg.var_typ with
-				| TVec Dim2 ->
-					let rreg = create_variable VSTemporary (TVec Dim4) in
-					Misc.ImpList.add code 
-						(create_instr (ITex(rreg, coordreg, sampler)));
-					{ rv_pos = expr.MlslAst.e_pos; rv_kind = RVReg rreg }
-				| tp ->
-					Errors.error_p expr.MlslAst.e_pos
-						"Texture coordinates defined at %s have type %s, but expected vec2."
-						(Errors.string_of_pos rvarg.rv_pos)
-						(string_of_typ tp);
-					raise Unfold_exception
-				end
-			| _ ->
-				Errors.error_p expr.MlslAst.e_pos
-					"Value defined at %s is a %s, can not be used as texture coordinates."
-					(Errors.string_of_pos rvarg.rv_pos)
-					(string_of_rvkind rvarg.rv_kind);
-				raise Unfold_exception
-			end
-		| RVFunc(closure, pat, body) ->
-			if !credits <= 0 then begin
-				Errors.error_p expr.MlslAst.e_pos
-					"Too complex functional code. Unfolding requires more than 1024 function applications.";
-				raise Unfold_exception
-			end else begin
-				credits := !credits - 1;
-				let gamma = bind_pattern code closure pat rvarg in
-				unfold_code vertex code gamma body
-			end
-		| _ -> 
-			Errors.error_p expr.MlslAst.e_pos
-				"Value defined at %s is not a function/sampler, can not be applied."
-				(Errors.string_of_pos func.rv_pos);
-				raise Unfold_exception
-		end
+		let func = unfold_code program_type code gamma e1 in
+		let arg  = unfold_code program_type code gamma e2 in
+		unfold_app expr.MlslAst.e_pos program_type code gamma func arg
 	| MlslAst.ELet(pat, e1, e2) ->
-		let rv1   = unfold_code vertex code gamma e1 in
+		let rv1   = unfold_code program_type code gamma e1 in
 		let gamma = bind_pattern code gamma pat rv1  in
-			unfold_code vertex code gamma e2
+			unfold_code program_type code gamma e2
 	| MlslAst.EFix _ ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EFix.";
 		raise Unfold_exception
 	| MlslAst.EIf(cnd, e1, e2) ->
-		Errors.error_p expr.MlslAst.e_pos
-			"Unimplemented: unfold_code EIf";
-		raise Unfold_exception
+		unfold_if_statement expr.MlslAst.e_pos program_type code gamma cnd e1 e2
 	| MlslAst.EMatch _ ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EMatch.";
 		raise Unfold_exception
@@ -823,8 +942,9 @@ let rec unfold_code vertex code gamma expr =
 		raise Unfold_exception
 
 let unfold_vertex gamma expr code =
-	let reg_val = unfold_code true code gamma expr in
-	match reg_val.rv_kind with
+	let reg_val = unfold_code PVertex code gamma expr in
+	let rv_kind = concrete_reg_value_kind expr.MlslAst.e_pos PVertex code reg_val in
+	match rv_kind with
 	| RVRecord rd ->
 		if not (StrMap.mem "position" rd) then begin
 			Errors.error_p expr.MlslAst.e_pos 
@@ -834,7 +954,7 @@ let unfold_vertex gamma expr code =
 		end else begin
 			let ok = StrMap.fold (fun v_name v_rv st ->
 				if v_name = "position" then st
-				else match v_rv.rv_kind with
+				else match concrete_reg_value_kind expr.MlslAst.e_pos PVertex code v_rv with
 				| RVReg vr ->
 					let vv = create_variable VSVarying vr.var_typ in
 					Misc.ImpList.add code (create_instr (IMov(vv, vr)));
@@ -846,7 +966,10 @@ let unfold_vertex gamma expr code =
 						v_name (Errors.string_of_pos v_rv.rv_pos);
 					false
 				) rd true in
-			match (StrMap.find "position" rd).rv_kind with
+			let result_rv_kind = 
+				concrete_reg_value_kind expr.MlslAst.e_pos PVertex code 
+					(StrMap.find "position" rd) in
+			match result_rv_kind with
 			| RVReg rr ->
 				begin match rr.var_typ with
 				| TVec Dim4 ->
@@ -871,8 +994,9 @@ let unfold_vertex gamma expr code =
 		raise Unfold_exception
 
 let unfold_fragment gamma expr code =
-	let reg_val = unfold_code false code gamma expr in
-	match reg_val.rv_kind with
+	let reg_val = unfold_code PFragment code gamma expr in
+	let rv_kind = concrete_reg_value_kind expr.MlslAst.e_pos PFragment code reg_val in
+	match rv_kind with
 	| RVReg col ->
 		begin match col.var_typ with
 		| TVec Dim4 ->
@@ -904,8 +1028,8 @@ let unfold_shader name value =
 				Hashtbl.clear varying_map;
 				let vs_code   = Misc.ImpList.create () in
 				let fs_code   = Misc.ImpList.create () in
-				let vs_gamma' = StrMap.map (regval_of_value vs_code) vs_gamma in
-				let fs_gamma' = StrMap.map (regval_of_value fs_code) fs_gamma in
+				let vs_gamma' = StrMap.map reg_value_of_value vs_gamma in
+				let fs_gamma' = StrMap.map reg_value_of_value fs_gamma in
 				let vertex    = unfold_vertex vs_gamma' vs_expr vs_code in
 				let fragment  = unfold_fragment fs_gamma' fs_expr fs_code in
 					Some

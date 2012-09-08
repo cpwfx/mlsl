@@ -1,6 +1,6 @@
 (* File: misc.mli *)
 
-exception Internal_error
+exception Internal_error of string
 
 val fast_pow : ('a -> 'a -> 'a) -> ('a -> 'a) -> 'a -> 'a -> int -> 'a
 
