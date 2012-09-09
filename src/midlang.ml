@@ -301,6 +301,11 @@ let make_reg_value pos kind =
 	; rv_kind = Some kind
 	}
 
+let make_reg_value_stub pos =
+	{ rv_pos  = pos
+	; rv_kind = None
+	}
+
 let reg_value_of_value value =
 	{ rv_pos  = value.TopDef.v_pos
 	; rv_kind = Some (RVValue value)
@@ -384,9 +389,16 @@ let const_or_reg_value_kind pos program_type rv =
 		reg_value_kind_of_const pos program_type name typ
 	| TopDef.VSampler(name, typ) ->
 		reg_value_kind_of_sampler pos program_type name typ
+	| TopDef.VRecord rd ->
+		RVRecord (StrMap.map reg_value_of_value rd)
+	| TopDef.VPair(v1, v2) ->
+		RVPair(reg_value_of_value v1, reg_value_of_value v2)
+	| TopDef.VFunc(closure, pat, body) ->
+		RVFunc(StrMap.map reg_value_of_value closure, pat, body)
 	| TopDef.VFragment _ | TopDef.VVertex _ | TopDef.VBool _ | TopDef.VInt _ 
-	| TopDef.VFloat _ | TopDef.VVec _ | TopDef.VMat _ | TopDef.VRecord _ 
-	| TopDef.VPair _ | TopDef.VFunc _ | TopDef.VConstrU _ | TopDef.VConstrP _ -> kind
+	| TopDef.VFloat _ | TopDef.VVec _ | TopDef.VMat _ | TopDef.VConstrU _ 
+	| TopDef.VConstrP _ ->
+		kind
 	end
 
 let concrete_reg_value_kind pos program_type code rv =
@@ -441,6 +453,29 @@ let concrete_reg_value_kind pos program_type code rv =
 		raise Unfold_exception
 	end
 
+let rv_reg_value_kind pos rv =
+	let kind = reg_value_kind pos rv in
+	match kind with
+	| RVReg _ | RVRecord _ | RVSampler _ | RVPair _ | RVFunc _ | RVIfFunc _ -> kind
+	| RVValue value ->
+	begin match value_kind pos value with
+	| TopDef.VAttr _ | TopDef.VConst _ | TopDef.VSampler _ 
+	| TopDef.VFragment _ | TopDef.VVertex _ | TopDef.VBool _ | TopDef.VInt _ 
+	| TopDef.VFloat _ | TopDef.VVec _ | TopDef.VMat _ -> kind
+	| TopDef.VRecord rd ->
+		RVRecord (StrMap.map reg_value_of_value rd)
+	| TopDef.VPair(v1, v2) ->
+		RVPair(reg_value_of_value v1, reg_value_of_value v2)
+	| TopDef.VFunc(closure, pat, body) ->
+		RVFunc(StrMap.map reg_value_of_value closure, pat, body)
+	| TopDef.VConstrU _ ->
+		Errors.error_p pos "Unimplemented: rv_reg_value_kind VConstrU";
+		raise Unfold_exception
+	| TopDef.VConstrP _ ->
+		Errors.error_p pos "Unimplemented: rv_reg_value_kind VConstrP";
+		raise Unfold_exception
+	end
+
 let string_of_rvkind kind =
 	match kind with
 	| RVReg _        -> "data type value"
@@ -468,14 +503,77 @@ let rec bind_pattern code gamma pat rv =
 	| MlslAst.PFalse ->
 		Errors.error_p pat.MlslAst.p_pos "Unimplemented: bind_pattern PTrue";
 		raise Unfold_exception
-	| MlslAst.PPair _ ->
-		Errors.error_p pat.MlslAst.p_pos "Unimplemented: bind_pattern PPair";
-		raise Unfold_exception
+	| MlslAst.PPair(pat1, pat2) ->
+		begin match rv_reg_value_kind pat.MlslAst.p_pos rv with
+		| RVPair(rv1, rv2) ->
+			let gamma1 = bind_pattern code gamma pat1 rv1 in
+			bind_pattern code gamma1 pat2 rv2
+		| _ ->
+			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
+				(Errors.string_of_pos rv.rv_pos);
+			raise Unfold_exception
+		end
 	| MlslAst.PConstrU _ ->
 		Errors.error_p pat.MlslAst.p_pos "Unimplemented: bind_pattern PConstrU";
 		raise Unfold_exception
 	| MlslAst.PConstrP _ ->
 		Errors.error_p pat.MlslAst.p_pos "Unimplemented: bind_pattern PConstrP";
+		raise Unfold_exception
+
+let rec fix_pattern_pre gamma pat =
+	match pat.MlslAst.p_kind with
+	| MlslAst.PAny -> (make_reg_value_stub pat.MlslAst.p_pos, gamma)
+	| MlslAst.PVar x | MlslAst.PTypedVar(x, _)->
+		let rv = make_reg_value_stub pat.MlslAst.p_pos in
+		(rv, StrMap.add x rv gamma)
+	| MlslAst.PTrue | MlslAst.PFalse -> 
+		(make_reg_value_stub pat.MlslAst.p_pos, gamma)
+	| MlslAst.PPair(pat1, pat2) ->
+		let (rv1, gamma1) = fix_pattern_pre gamma pat1 in
+		let (rv2, gamma2) = fix_pattern_pre gamma1 pat2 in
+		(make_reg_value pat.MlslAst.p_pos (RVPair(rv1, rv2)), gamma2)
+	| MlslAst.PConstrU _ ->
+		Errors.error_p pat.MlslAst.p_pos "Unimplemented: fix_pattern_pre PConstrU";
+		raise Unfold_exception
+	| MlslAst.PConstrP _ ->
+		Errors.error_p pat.MlslAst.p_pos "Unimplemented: fix_pattern_pre PConstrP";
+		raise Unfold_exception
+
+let rec fix_pattern_post code pat rv0 rv =
+	match pat.MlslAst.p_kind with
+	| MlslAst.PAny | MlslAst.PVar _ ->
+		rv0.rv_kind <- Some (reg_value_kind pat.MlslAst.p_pos rv);
+		rv
+	| MlslAst.PTypedVar(x, tp) ->
+		rv0.rv_kind <- Some (reg_value_kind pat.MlslAst.p_pos
+			(cast_regval_to_type pat.MlslAst.p_pos code rv tp.MlslAst.tt_typ));
+		rv
+	| MlslAst.PTrue ->
+		Errors.error_p pat.MlslAst.p_pos "Unimplemented: fix_pattern_post PTrue";
+		raise Unfold_exception
+	| MlslAst.PFalse ->
+		Errors.error_p pat.MlslAst.p_pos "Unimplemented: fix_pattern_post PTrue";
+		raise Unfold_exception
+	| MlslAst.PPair(pat1, pat2) ->
+		begin match rv_reg_value_kind pat.MlslAst.p_pos rv0 with
+		| RVPair(rv10, rv20) ->
+			begin match rv_reg_value_kind pat.MlslAst.p_pos rv with
+			| RVPair(rv1, rv2) ->
+				let rv1' = fix_pattern_post code pat1 rv10 rv1 in
+				let rv2' = fix_pattern_post code pat2 rv20 rv2 in
+				make_reg_value pat.MlslAst.p_pos (RVPair(rv1', rv2'))
+			| _ ->
+				Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
+					(Errors.string_of_pos rv.rv_pos);
+				raise Unfold_exception
+			end
+		| _ -> raise (Misc.Internal_error "Invalid fix skeleton.")
+		end
+	| MlslAst.PConstrU _ ->
+		Errors.error_p pat.MlslAst.p_pos "Unimplemented: fix_pattern_post PConstrU";
+		raise Unfold_exception
+	| MlslAst.PConstrP _ ->
+		Errors.error_p pat.MlslAst.p_pos "Unimplemented: fix_pattern_post PConstrP";
 		raise Unfold_exception
 
 let ins tp f code =
@@ -1134,8 +1232,9 @@ and unfold_code program_type code gamma expr =
 		let gamma = bind_pattern code gamma pat rv1  in
 			unfold_code program_type code gamma e2
 	| MlslAst.EFix(pat, e) ->
-		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EFix.";
-		raise Unfold_exception
+		let (rv0, gamma') = fix_pattern_pre gamma pat in
+		let rv = unfold_code program_type code gamma' e in
+		fix_pattern_post code pat rv0 rv
 	| MlslAst.EIf(cnd, e1, e2) ->
 		unfold_if_statement expr.MlslAst.e_pos program_type code gamma cnd e1 e2
 	| MlslAst.EMatch _ ->
