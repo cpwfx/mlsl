@@ -321,6 +321,9 @@ let reg_value_kind pos rv =
 		raise Unfold_exception
 	| Some kind -> kind
 
+let value_kind pos value =
+	EvalPrim.with_exn Unfold_exception (fun () -> EvalPrim.value_kind pos value)
+
 let reg_value_kind_of_attr pos program_type name semantics typ =
 	match program_type with
 	| PVertex ->
@@ -374,7 +377,7 @@ let const_or_reg_value_kind pos program_type rv =
 	match kind with
 	| RVReg _ | RVRecord _ | RVSampler _ | RVPair _ | RVFunc _ | RVIfFunc _ -> kind
 	| RVValue value ->
-	begin match value.TopDef.v_kind with
+	begin match value_kind pos value with
 	| TopDef.VAttr(name, semantics, typ) ->
 		reg_value_kind_of_attr pos program_type name semantics typ
 	| TopDef.VConst(name, typ) ->
@@ -384,9 +387,6 @@ let const_or_reg_value_kind pos program_type rv =
 	| TopDef.VFragment _ | TopDef.VVertex _ | TopDef.VBool _ | TopDef.VInt _ 
 	| TopDef.VFloat _ | TopDef.VVec _ | TopDef.VMat _ | TopDef.VRecord _ 
 	| TopDef.VPair _ | TopDef.VFunc _ | TopDef.VConstrU _ | TopDef.VConstrP _ -> kind
-	| TopDef.VFixed _ ->
-		Errors.error_p pos "Unimplemented: constr_or_reg_value_kind VFixed.";
-		raise Unfold_exception
 	end
 
 let concrete_reg_value_kind pos program_type code rv =
@@ -394,7 +394,7 @@ let concrete_reg_value_kind pos program_type code rv =
 	match kind with
 	| RVReg _ | RVRecord _ | RVSampler _ | RVPair _ | RVFunc _ | RVIfFunc _ -> kind
 	| RVValue value ->
-	begin match value.TopDef.v_kind with
+	begin match value_kind pos value with
 	| TopDef.VAttr(name, semantics, typ) ->
 		reg_value_kind_of_attr pos program_type name semantics typ
 	| TopDef.VConst(name, typ) ->
@@ -438,9 +438,6 @@ let concrete_reg_value_kind pos program_type code rv =
 		raise Unfold_exception
 	| TopDef.VConstrP _ ->
 		Errors.error_p pos "Unimplemented: concrete_reg_value_kind VConstrP";
-		raise Unfold_exception
-	| TopDef.VFixed vr ->
-		Errors.error_p pos "Unimplemented: concrete_reg_value_kind VFixed";
 		raise Unfold_exception
 	end
 
@@ -842,7 +839,7 @@ let register_of_const_or_reg pos code kind =
 	match kind with
 	| RVReg reg -> reg
 	| RVValue value ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VBool b ->
 			let rreg = create_variable VSTemporary TBool in
 			Misc.ImpList.add code (create_instr (IConstBool(rreg, b)));
@@ -1023,7 +1020,7 @@ let rec unfold_if_statement pos program_type code gamma cnd e1 e2 =
 			raise Unfold_exception
 		end
 	| RVValue value ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VBool b ->
 			unfold_code program_type code gamma (if b then e1 else e2)
 		| kind ->
@@ -1136,7 +1133,7 @@ and unfold_code program_type code gamma expr =
 		let rv1   = unfold_code program_type code gamma e1 in
 		let gamma = bind_pattern code gamma pat rv1  in
 			unfold_code program_type code gamma e2
-	| MlslAst.EFix _ ->
+	| MlslAst.EFix(pat, e) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: unfold_code EFix.";
 		raise Unfold_exception
 	| MlslAst.EIf(cnd, e1, e2) ->
@@ -1229,12 +1226,12 @@ let unfold_fragment gamma expr code =
 			(Errors.string_of_pos reg_val.rv_pos); 
 		raise Unfold_exception
 
-let unfold_shader name value =
+let unfold_shader pos name value =
 	credits := 1024;
 	try
-		match value.TopDef.v_kind with
+		match value_kind pos value with
 		| TopDef.VPair(vs, fs) ->
-			begin match vs.TopDef.v_kind, fs.TopDef.v_kind with
+			begin match value_kind pos vs, value_kind pos fs with
 			| TopDef.VVertex(vs_gamma, vs_expr), TopDef.VFragment(fs_gamma, fs_expr) ->
 				Hashtbl.clear attr_map;
 				Hashtbl.clear v_const_map;

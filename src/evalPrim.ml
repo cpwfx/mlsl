@@ -4,10 +4,18 @@ open Misc.Dim
 
 exception EvalPrim_exception
 
+let value_kind pos value =
+	match value.TopDef.v_kind with
+	| None ->
+		Errors.error_p pos "Ivalid fixpoint: This value (defined at %s) was used during its evaluation."
+			(Errors.string_of_pos value.TopDef.v_pos);
+		raise EvalPrim_exception
+	| Some kind -> kind
+
 let get_component pos value comp =
 	match comp with
 	| MlslAst.Swizzle.X ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VInt n   -> float_of_int n
 		| TopDef.VFloat v -> v
 		| TopDef.VVec(_, v) -> v.(0)
@@ -17,7 +25,7 @@ let get_component pos value comp =
 			raise EvalPrim_exception
 		end
 	| MlslAst.Swizzle.Y ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VVec(_, v) -> v.(1)
 		| kind ->
 			Errors.error_p pos "Can not get component y from %s defined at %s"
@@ -25,7 +33,7 @@ let get_component pos value comp =
 			raise EvalPrim_exception
 		end
 	| MlslAst.Swizzle.Z ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VVec(dim, v) when int_of_dim dim >= 3 -> v.(2)
 		| kind ->
 			Errors.error_p pos "Can not get component z from %s defined at %s"
@@ -33,7 +41,7 @@ let get_component pos value comp =
 			raise EvalPrim_exception
 		end
 	| MlslAst.Swizzle.W ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VVec(dim, v) when int_of_dim dim >= 4 -> v.(3)
 		| kind ->
 			Errors.error_p pos "Can not get component w from %s defined at %s"
@@ -80,7 +88,7 @@ let eval_binop pos op v1 v2 =
 		Errors.error_p pos "Unimpleneted: eval_binop BOGt";
 		raise EvalPrim_exception
 	| MlslAst.BOAdd ->
-		begin match v1.TopDef.v_kind, v2.TopDef.v_kind with
+		begin match value_kind pos v1, value_kind pos v2 with
 		| TopDef.VInt n1, TopDef.VInt n2 -> 
 			TopDef.make_value pos (TopDef.VInt (n1 + n2))
 		| TopDef.VInt n1, TopDef.VFloat f2 ->
@@ -99,7 +107,7 @@ let eval_binop pos op v1 v2 =
 			raise EvalPrim_exception
 		end
 	| MlslAst.BOSub ->
-		begin match v1.TopDef.v_kind, v2.TopDef.v_kind with
+		begin match value_kind pos v1, value_kind pos v2 with
 		| TopDef.VInt n1, TopDef.VInt n2 ->
 			TopDef.make_value pos (TopDef.VInt (n1 - n2))
 		| TopDef.VInt n1, TopDef.VFloat f2 ->
@@ -118,7 +126,7 @@ let eval_binop pos op v1 v2 =
 			raise EvalPrim_exception
 		end
 	| MlslAst.BOMul ->
-		begin match v1.TopDef.v_kind, v2.TopDef.v_kind with
+		begin match value_kind pos v1, value_kind pos v2 with
 		| TopDef.VInt n1, TopDef.VInt n2 ->
 			TopDef.make_value pos (TopDef.VInt (n1 * n2))
 		| TopDef.VInt n1, TopDef.VFloat f1 ->
@@ -155,7 +163,7 @@ let eval_binop pos op v1 v2 =
 			raise EvalPrim_exception
 		end
 	| MlslAst.BODiv ->
-		begin match v1.TopDef.v_kind, v2.TopDef.v_kind with
+		begin match value_kind pos v1, value_kind pos v2 with
 		| TopDef.VInt n1, TopDef.VInt n2 ->
 			TopDef.make_value pos (TopDef.VInt (n1 / n2))
 		| TopDef.VInt n1, TopDef.VFloat f2 ->
@@ -184,7 +192,7 @@ let eval_binop pos op v1 v2 =
 			raise EvalPrim_exception
 		end
 	| MlslAst.BOMod ->
-		begin match v1.TopDef.v_kind, v2.TopDef.v_kind with
+		begin match value_kind pos v1, value_kind pos v2 with
 		| TopDef.VInt n1, TopDef.VInt n2 ->
 			TopDef.make_value pos (TopDef.VInt (n1 mod n2))
 		| TopDef.VInt n1, TopDef.VFloat f2 ->
@@ -213,7 +221,7 @@ let eval_binop pos op v1 v2 =
 			raise EvalPrim_exception
 		end
 	| MlslAst.BODot ->
-		begin match v1.TopDef.v_kind, v2.TopDef.v_kind with
+		begin match value_kind pos v1, value_kind pos v2 with
 		| TopDef.VInt n1, TopDef.VInt n2 ->
 			TopDef.make_value pos (TopDef.VInt(n1 * n2))
 		| TopDef.VInt n1, TopDef.VFloat f2 ->
@@ -230,7 +238,7 @@ let eval_binop pos op v1 v2 =
 			raise EvalPrim_exception
 		end
 	| MlslAst.BOCross ->
-		begin match v1.TopDef.v_kind, v2.TopDef.v_kind with
+		begin match value_kind pos v1, value_kind pos v2 with
 		| TopDef.VVec(Dim2, vv1), TopDef.VVec(Dim2, vv2) ->
 			TopDef.make_value pos (TopDef.VFloat
 				(vv1.(0) *. vv2.(1) -. vv1.(1) *. vv2.(0)))
@@ -246,7 +254,7 @@ let eval_binop pos op v1 v2 =
 			raise EvalPrim_exception
 		end
 	| MlslAst.BOPow ->
-		begin match v1.TopDef.v_kind, v2.TopDef.v_kind with
+		begin match value_kind pos v1, value_kind pos v2 with
 		| TopDef.VInt n1, TopDef.VInt n2 ->
 			TopDef.make_value pos (TopDef.VFloat (Misc.fast_pow ( *. ) (fun x -> 1.0 /. x) 1.0 
 				(float_of_int n1) n2))
@@ -272,7 +280,7 @@ let eval_binop pos op v1 v2 =
 			raise EvalPrim_exception
 		end
 	| MlslAst.BOMin ->
-		begin match v1.TopDef.v_kind, v2.TopDef.v_kind with
+		begin match value_kind pos v1, value_kind pos v2 with
 		| TopDef.VInt n1, TopDef.VInt n2 ->
 			TopDef.make_value pos (TopDef.VInt (min n1 n2))
 		| TopDef.VInt n1, TopDef.VFloat f2 ->
@@ -294,7 +302,7 @@ let eval_binop pos op v1 v2 =
 let eval_unop pos op v =
 	match op with
 	| MlslAst.UONeg ->
-		begin match v.TopDef.v_kind with
+		begin match value_kind pos v with
 		| TopDef.VInt n ->
 			TopDef.make_value pos (TopDef.VInt (-n))
 		| TopDef.VFloat f ->
@@ -309,7 +317,7 @@ let eval_unop pos op v =
 			raise EvalPrim_exception
 		end
 	| MlslAst.UOPlus ->
-		begin match v.TopDef.v_kind with
+		begin match value_kind pos v with
 		| TopDef.VInt n ->
 			TopDef.make_value pos (TopDef.VInt n)
 		| TopDef.VFloat f ->

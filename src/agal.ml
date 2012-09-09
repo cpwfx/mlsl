@@ -90,6 +90,7 @@ type instr_kind =
 | IMul of dest * source * source
 | IDiv of dest * source * source
 | IMin of dest * source * source
+| IMax of dest * source * source
 | IFrc of dest * source
 | IPow of dest * source * source
 | ICrs of dest * source * source
@@ -143,11 +144,10 @@ let variable_of_const c =
 
 let instr_dest instr =
 	match instr with
-	| IMov(dest, _)    | IAdd(dest, _, _) | ISub(dest, _, _) 
-	| IMul(dest, _, _) | IDiv(dest, _, _) | IMin(dest, _, _)
-	| IFrc(dest, _)    | IPow(dest, _, _) | ICrs(dest, _, _) 
-	| IDp3(dest, _, _) | IDp4(dest, _, _) | INeg(dest, _)    
-	| ISat(dest, _)    | IM33(dest, _, _) | IM44(dest, _, _) 
+	| IMov(dest, _)    | IAdd(dest, _, _) | ISub(dest, _, _) | IMul(dest, _, _)
+	| IDiv(dest, _, _) | IMin(dest, _, _) | IMax(dest, _, _) | IFrc(dest, _)    
+	| IPow(dest, _, _) | ICrs(dest, _, _) | IDp3(dest, _, _) | IDp4(dest, _, _) 
+	| INeg(dest, _)    | ISat(dest, _)    | IM33(dest, _, _) | IM44(dest, _, _) 
 	| IM34(dest, _, _) | ITex(dest, _, _) | ICrs2(dest, _, _) -> dest
 
 (* ========================================================================= *)
@@ -440,11 +440,7 @@ let create_instr kind =
 let build_binop rv r1 r2 op =
 	match op with
 	| Midlang.BOOrB ->
-		let tmp = make_temp_reg 1 1 in
-		Some
-		[ create_instr (IAdd(make_dest_float_reg tmp, make_source r1, make_source r2))
-		; create_instr (ISat(make_dest_float rv, make_source_reg tmp))
-		]
+		Some [create_instr (IMax(make_dest_float rv, make_source r1, make_source r2))]
 	| Midlang.BOAddB | Midlang.BOAddI | Midlang.BOAddF ->
 		Some [create_instr (IAdd(make_dest_float rv, make_source r1, make_source r2))]
 	| Midlang.BOAddM(dim1, dim) ->
@@ -769,10 +765,10 @@ module LiveVar = struct
 		| ITex(_, src, _) -> 
 			VarSet.add src.src_var a
 		| IAdd(_, src1, src2) | ISub(_, src1, src2) | IMul(_, src1, src2)
-		| IDiv(_, src1, src2) | IMin(_, src1, src2) | IPow(_, src1, src2) 
-		| ICrs(_, src1, src2) | IDp3(_, src1, src2) | IDp4(_, src1, src2) 
-		| IM33(_, src1, src2) | IM44(_, src1, src2) | IM34(_, src1, src2) 
-		| ICrs2(_, src1, src2) ->
+		| IDiv(_, src1, src2) | IMin(_, src1, src2) | IMax(_, src1, src2)
+		| IPow(_, src1, src2) | ICrs(_, src1, src2) | IDp3(_, src1, src2)
+		| IDp4(_, src1, src2) | IM33(_, src1, src2) | IM44(_, src1, src2) 
+		| IM34(_, src1, src2) | ICrs2(_, src1, src2) ->
 			VarSet.add src1.src_var (VarSet.add src2.src_var a)
 
 	let rec compute_loop last code =
@@ -794,7 +790,7 @@ end
 module Vec3Output = struct
 	let compute_instr instr =
 		match instr with
-		| IMov _ | IAdd _ | ISub _ | IMul _ | IDiv _ | IMin _ | IFrc _ 
+		| IMov _ | IAdd _ | ISub _ | IMul _ | IDiv _ | IMin _ | IMax _ | IFrc _
 		| IPow _ | IDp3 _ | IDp4 _ | INeg _ | ISat _ | IM44 _ | ITex _ -> 
 			()
 		| ICrs(dest, _, _) | IM33(dest, _, _) | IM34(dest, _, _) 
@@ -1157,6 +1153,11 @@ let rec write_bytecode out code =
 			write_dest out dst;
 			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
 			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		| IMax(dst, src1, src2) ->
+			LittleEndian.write_int out 0x07;
+			write_dest out dst;
+			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
 		| IFrc(dst, src) ->
 			LittleEndian.write_int out 0x08;
 			write_dest out dst;
@@ -1360,6 +1361,10 @@ let rec write_asm vertex out code =
 			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
 			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
 		| IMin(dst, src1, src2) -> Printf.fprintf out "min %s, %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		| IMax(dst, src1, src2) -> Printf.fprintf out "max %s, %s, %s\n"
 			(write_dest_asm vertex dst)
 			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
 			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))

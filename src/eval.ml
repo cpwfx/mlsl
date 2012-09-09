@@ -13,22 +13,13 @@ let target_func = ref (fun _ -> ())
 let set_target_func f =
 	target_func := f
 
-let rec fix_value value =
-	match value.TopDef.v_kind with
-	| TopDef.VFixed r ->
-		begin match !r with
-		| Some v -> fix_value v
-		| None ->
-			Errors.error_p value.TopDef.v_pos 
-				"Invalid fixpoint: This value was used during its evaluation.";
-			raise Eval_exception
-		end
-	| _ -> value
+let value_kind pos value =
+	EvalPrim.with_exn Eval_exception (fun () -> EvalPrim.value_kind pos value)
 
 let rec cast_value_to_type pos value typ =
 	match typ with
 	| MlslAst.TBool ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VBool _ -> value
 		| kind ->
 			Errors.error_p pos "Value defined at %s is a %s, but expected bool."
@@ -36,7 +27,7 @@ let rec cast_value_to_type pos value typ =
 			raise Eval_exception
 		end
 	| MlslAst.TFloat ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VInt n -> TopDef.make_value value.TopDef.v_pos (TopDef.VFloat (float_of_int n))
 		| TopDef.VFloat _ -> value
 		| kind ->
@@ -45,7 +36,7 @@ let rec cast_value_to_type pos value typ =
 			raise Eval_exception
 		end
 	| MlslAst.TInt ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VInt n -> value
 		| kind ->
 			Errors.error_p pos "Value defined at %s is a %s, but expected int."
@@ -53,7 +44,7 @@ let rec cast_value_to_type pos value typ =
 			raise Eval_exception
 		end
 	| MlslAst.TMat(d1, d2) ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VMat(d1', d2', _) when d1 = d1' && d2 = d2' -> value
 		| kind ->
 			Errors.error_p pos "Value defined at %s is a %s, but expected mat%d%d."
@@ -62,7 +53,7 @@ let rec cast_value_to_type pos value typ =
 			raise Eval_exception
 		end
 	| MlslAst.TSampler2D ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VSampler(_, tt) when tt.MlslAst.tt_typ = MlslAst.TSampler2D -> value
 		| kind ->
 			Errors.error_p pos "Value defined at %s is a %s, but expected sampler2D."
@@ -70,7 +61,7 @@ let rec cast_value_to_type pos value typ =
 			raise Eval_exception
 		end
 	| MlslAst.TSamplerCube -> 
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VSampler(_, tt) when tt.MlslAst.tt_typ = MlslAst.TSamplerCube -> value
 		| kind ->
 			Errors.error_p pos "Value defined at %s is a %s, but expected samplerCube."
@@ -78,7 +69,7 @@ let rec cast_value_to_type pos value typ =
 			raise Eval_exception
 		end
 	| MlslAst.TUnit ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VConstrU "()" -> value
 		| kind ->
 			Errors.error_p pos "Value defined at %s is a %s, but expected unit."
@@ -86,7 +77,7 @@ let rec cast_value_to_type pos value typ =
 			raise Eval_exception
 		end
 	| MlslAst.TVec d ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VVec(d', _) when d = d' -> value
 		| kind -> 
 			Errors.error_p pos "Value defined at %s is a %s, but expected vec%d."
@@ -95,7 +86,7 @@ let rec cast_value_to_type pos value typ =
 			raise Eval_exception
 		end
 	| MlslAst.TArrow _ ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VFunc _ -> value
 		| kind ->
 			Errors.error_p pos "Value defined at %s is a %s, but expected function."
@@ -103,21 +94,21 @@ let rec cast_value_to_type pos value typ =
 			raise Eval_exception
 		end
 	| MlslAst.TPair(t1, t2) ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VPair(v1, v2) ->
 			TopDef.make_value value.TopDef.v_pos (TopDef.VPair
-				(cast_value_to_type pos (fix_value v1) t1, cast_value_to_type pos (fix_value v2) t2) )
+				(cast_value_to_type pos v1 t1, cast_value_to_type pos v2 t2) )
 		| kind ->
 			Errors.error_p pos "Value defined at %s is a %s, but expected pair."
 				(Errors.string_of_pos value.TopDef.v_pos) (TopDef.string_of_value_kind kind);
 			raise Eval_exception
 		end
 	| MlslAst.TRecord rd ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VRecord rmap ->
 			let rmap' = List.fold_left (fun rm (field, tp) ->
 				try
-					StrMap.add field (cast_value_to_type pos (fix_value (StrMap.find field rmap)) tp) rm
+					StrMap.add field (cast_value_to_type pos (StrMap.find field rmap) tp) rm
 				with
 				| Not_found ->
 					Errors.error_p pos "Record defined at %s hasn't field %s."
@@ -131,7 +122,7 @@ let rec cast_value_to_type pos value typ =
 			raise Eval_exception
 		end
 	| MlslAst.TVertex _ | MlslAst.TVertexTop ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VVertex _ -> value
 		| kind ->
 			Errors.error_p pos "Value defined at %s is a %s, but expected vertex program."
@@ -139,7 +130,7 @@ let rec cast_value_to_type pos value typ =
 			raise Eval_exception
 		end
 	| MlslAst.TFragment _ ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pos value with
 		| TopDef.VFragment _ -> value
 		| kind ->
 			Errors.error_p pos "Value defined at %s is a %s, but expected fragment program."
@@ -149,7 +140,10 @@ let rec cast_value_to_type pos value typ =
 
 let print_gamma gamma =
 	StrMap.iter (fun x v ->
-		Printf.printf "%s = %s\n" x (TopDef.string_of_value_kind v.TopDef.v_kind)
+		Printf.printf "%s = %s\n" x (
+			match v.TopDef.v_kind with
+			| None -> "unevaluated"
+			| Some kind -> TopDef.string_of_value_kind kind)
 	) gamma;
 	print_endline "==============================="
 
@@ -160,7 +154,7 @@ let rec bind_pattern gamma pat value =
 	| MlslAst.PTypedVar(x, tp) ->
 		StrMap.add x (cast_value_to_type pat.MlslAst.p_pos value tp.MlslAst.tt_typ) gamma
 	| MlslAst.PTrue ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value with
 		| TopDef.VBool true  -> gamma
 		| _ ->
 			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
@@ -168,7 +162,7 @@ let rec bind_pattern gamma pat value =
 			raise Eval_exception
 		end
 	| MlslAst.PFalse ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value with
 		| TopDef.VBool false -> gamma
 		| _ ->
 			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
@@ -176,17 +170,17 @@ let rec bind_pattern gamma pat value =
 			raise Eval_exception
 		end
 	| MlslAst.PPair(pat1, pat2) ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value with
 		| TopDef.VPair(v1, v2) ->
-			let gamma1 = bind_pattern gamma pat1 (fix_value v1) in
-			bind_pattern gamma1 pat2 (fix_value v2)
+			let gamma1 = bind_pattern gamma pat1 v1 in
+			bind_pattern gamma1 pat2 v2
 		| _ ->
 			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
 				(Errors.string_of_pos value.TopDef.v_pos);
 			raise Eval_exception
 		end
 	| MlslAst.PConstrU name ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value with
 		| TopDef.VConstrU name' when name = name' -> gamma
 		| _ ->
 			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
@@ -194,8 +188,8 @@ let rec bind_pattern gamma pat value =
 			raise Eval_exception
 		end
 	| MlslAst.PConstrP(name, p) ->
-		begin match value.TopDef.v_kind with
-		| TopDef.VConstrP(name', v) when name = name' -> bind_pattern gamma p (fix_value v)
+		begin match value_kind pat.MlslAst.p_pos value with
+		| TopDef.VConstrP(name', v) when name = name' -> bind_pattern gamma p v
 		| _ ->
 			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
 				(Errors.string_of_pos value.TopDef.v_pos);
@@ -209,43 +203,43 @@ let rec try_bind_pattern gamma pat value =
 	| MlslAst.PTypedVar(x, tp) -> 
 		Some (StrMap.add x (cast_value_to_type pat.MlslAst.p_pos value tp.MlslAst.tt_typ) gamma)
 	| MlslAst.PTrue ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value with
 		| TopDef.VBool true -> Some gamma
 		| _ -> None
 		end
 	| MlslAst.PFalse ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value with
 		| TopDef.VBool false -> Some gamma
 		| _ -> None
 		end
 	| MlslAst.PPair(pat1, pat2) ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value with
 		| TopDef.VPair(v1, v2) ->
-			Misc.Opt.bind (try_bind_pattern gamma pat1 (fix_value v1)) (fun gamma ->
-				try_bind_pattern gamma pat2 (fix_value v2))
+			Misc.Opt.bind (try_bind_pattern gamma pat1 v1) (fun gamma ->
+				try_bind_pattern gamma pat2 v2)
 		| _ -> None
 		end
 	| MlslAst.PConstrU name ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value with
 		| TopDef.VConstrU name' when name = name' -> Some gamma
 		| _ -> None
 		end
 	| MlslAst.PConstrP(name, pat) ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value with
 		| TopDef.VConstrP(name', v) when name = name' ->
-			try_bind_pattern gamma pat (fix_value v)
+			try_bind_pattern gamma pat v
 		| _ -> None
 		end
 
 let rec fix_pattern_pre gamma pat =
 	let pos = pat.MlslAst.p_pos in
 	match pat.MlslAst.p_kind with
-	| MlslAst.PAny -> (TopDef.make_value pos (TopDef.VFixed (ref None)), gamma)
+	| MlslAst.PAny -> (TopDef.make_value_stub pos, gamma)
 	| MlslAst.PVar x | MlslAst.PTypedVar(x, _) ->
-		let v = TopDef.make_value pos (TopDef.VFixed (ref None)) in
+		let v = TopDef.make_value_stub pos in
 		(v, StrMap.add x v gamma)
 	| MlslAst.PTrue | MlslAst.PFalse | MlslAst.PConstrU _ -> 
-		(TopDef.make_value pos (TopDef.VFixed (ref None)), gamma)
+		(TopDef.make_value_stub pos, gamma)
 	| MlslAst.PPair(pat1, pat2) ->
 		let (v1, gamma1) = fix_pattern_pre gamma  pat1 in
 		let (v2, gamma2) = fix_pattern_pre gamma1 pat2 in
@@ -257,54 +251,39 @@ let rec fix_pattern_pre gamma pat =
 let rec fix_pattern_post pat value0 value =
 	match pat.MlslAst.p_kind with
 	| MlslAst.PAny | MlslAst.PVar _ ->
-		begin match value0.TopDef.v_kind with
-		| TopDef.VFixed vr -> 
-			vr := Some value;
-			value
-		| _ -> raise (Misc.Internal_error "Invalid fix skeleton.")
-		end
+		value0.TopDef.v_kind <- Some (value_kind pat.MlslAst.p_pos value);
+		value
 	| MlslAst.PTypedVar(x, tp) ->
-		begin match value0.TopDef.v_kind with
-		| TopDef.VFixed vr -> 
-			vr := Some (cast_value_to_type pat.MlslAst.p_pos value tp.MlslAst.tt_typ);
-			value
-		| _ -> raise (Misc.Internal_error "Invalid fix skeleton.")
-		end
+		value0.TopDef.v_kind <- Some (value_kind pat.MlslAst.p_pos
+			(cast_value_to_type pat.MlslAst.p_pos value tp.MlslAst.tt_typ));
+		value
 	| MlslAst.PTrue ->
-		begin match value0.TopDef.v_kind with
-		| TopDef.VFixed vr ->
-			begin match value.TopDef.v_kind with
-			| TopDef.VBool true ->
-				vr := Some value;
-				value
-			| _ ->
-				Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
-					(Errors.string_of_pos value.TopDef.v_pos);
-				raise Eval_exception
-			end
-		| _ -> raise (Misc.Internal_error "Invalid fix skeleton.")
+		begin match value_kind pat.MlslAst.p_pos value with
+		| TopDef.VBool true ->
+			value0.TopDef.v_kind <- Some (TopDef.VBool true);
+			value
+		| _ ->
+			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
+				(Errors.string_of_pos value.TopDef.v_pos);
+			raise Eval_exception
 		end
 	| MlslAst.PFalse ->
-		begin match value0.TopDef.v_kind with
-		| TopDef.VFixed vr ->
-			begin match value.TopDef.v_kind with
-			| TopDef.VBool false ->
-				vr := Some value;
-				value
-			| _ ->
-				Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
-					(Errors.string_of_pos value.TopDef.v_pos);
-				raise Eval_exception
-			end
-		| _ -> raise (Misc.Internal_error "Invalid fix skeleton.")
+		begin match value_kind pat.MlslAst.p_pos value with
+		| TopDef.VBool false ->
+			value0.TopDef.v_kind <- Some (TopDef.VBool false);
+			value
+		| _ ->
+			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
+				(Errors.string_of_pos value.TopDef.v_pos);
+			raise Eval_exception
 		end
 	| MlslAst.PPair(pat1, pat2) ->
-		begin match value0.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value0 with
 		| TopDef.VPair(val10, val20) ->
-			begin match value.TopDef.v_kind with
+			begin match value_kind pat.MlslAst.p_pos value with
 			| TopDef.VPair(val1, val2) ->
-				let val1' = fix_pattern_post pat1 val10 (fix_value val1) in
-				let val2' = fix_pattern_post pat2 val20 (fix_value val2) in
+				let val1' = fix_pattern_post pat1 val10 val1 in
+				let val2' = fix_pattern_post pat2 val20 val2 in
 				TopDef.make_value value.TopDef.v_pos (TopDef.VPair(val1', val2'))
 			| _ ->
 				Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
@@ -314,25 +293,21 @@ let rec fix_pattern_post pat value0 value =
 		| _ -> raise (Misc.Internal_error "Invalid fix skeleton.")
 		end
 	| MlslAst.PConstrU name ->
-		begin match value0.TopDef.v_kind with
-		| TopDef.VFixed vr ->
-			begin match value.TopDef.v_kind with
-			| TopDef.VConstrU name' when name = name' ->
-				vr := Some value;
-				value
-			| _ ->
-				Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
-					(Errors.string_of_pos value.TopDef.v_pos);
-				raise Eval_exception
-			end
-		| _ -> raise (Misc.Internal_error "Invalid fix skeleton.")
+		begin match value_kind pat.MlslAst.p_pos value with
+		| TopDef.VConstrU name' when name = name' ->
+			value0.TopDef.v_kind <- Some (TopDef.VConstrU name);
+			value
+		| _ ->
+			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
+				(Errors.string_of_pos value.TopDef.v_pos);
+			raise Eval_exception
 		end
 	| MlslAst.PConstrP(name, pat') ->
-		begin match value0.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value0 with
 		| TopDef.VConstrP(_, val0) ->
-			begin match value.TopDef.v_kind with
+			begin match value_kind pat.MlslAst.p_pos value with
 			| TopDef.VConstrP(name', val1) when name = name' ->
-				let val1' = fix_pattern_post pat' val0 (fix_value val1) in
+				let val1' = fix_pattern_post pat' val0 val1 in
 				TopDef.make_value value.TopDef.v_pos (TopDef.VConstrP(name, val1'))
 			| _ ->
 				Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
@@ -347,11 +322,11 @@ let rec eval gamma expr =
 	match expr.MlslAst.e_kind with
 	| MlslAst.EVar x ->
 		begin try
-			fix_value (StrMap.find x gamma)
+			StrMap.find x gamma
 		with
 		| Not_found ->
 			begin match TopDef.check_name x with
-			| Some value -> fix_value value
+			| Some value -> value
 			| None ->
 				Errors.error_p pos "Unbound value %s" x;
 				raise Eval_exception
@@ -381,10 +356,10 @@ let rec eval gamma expr =
 			) StrMap.empty fields))
 	| MlslAst.ESelect(e, field) ->
 		let v = eval gamma e in
-		begin match v.TopDef.v_kind with
+		begin match value_kind pos v with
 		| TopDef.VRecord record ->
 			begin try
-				fix_value (StrMap.find field record)
+				StrMap.find field record
 			with
 			| Not_found ->
 				Errors.error_p pos "Record defined at %s hasn't field %s."
@@ -412,7 +387,7 @@ let rec eval gamma expr =
 	| MlslAst.EApp(e1, e2) ->
 		let func = eval gamma e1 in
 		let arg  = eval gamma e2 in
-		begin match func.TopDef.v_kind with
+		begin match value_kind pos func with
 		| TopDef.VFunc(gamma', pat, body) ->
 			if !credits <= 0 then begin
 				Errors.error_p pos
@@ -441,7 +416,7 @@ let rec eval gamma expr =
 		fix_pattern_post pat v0 v
 	| MlslAst.EIf(cnd, e1, e2) ->
 		let cnd_val = eval gamma cnd in
-		begin match cnd_val.TopDef.v_kind with
+		begin match value_kind pos cnd_val with
 		| TopDef.VBool b ->
 			if b then eval gamma e1 else eval gamma e2
 		| kind ->
@@ -483,7 +458,7 @@ and bind_match_pattern_list gamma pats value cnd_opt =
 		| Some gamma', None -> Some gamma'
 		| Some gamma', Some cnd ->
 			let cnd_val = eval gamma' cnd in
-			begin match cnd_val.TopDef.v_kind with
+			begin match value_kind cnd.MlslAst.e_pos cnd_val with
 			| TopDef.VBool b ->
 				if b then Some gamma'
 				else bind_match_pattern_list gamma pats value cnd_opt
@@ -502,7 +477,7 @@ let rec bind_top_pattern pat value =
 	| MlslAst.PTypedVar(x, tp) ->
 		TopDef.add x (cast_value_to_type pat.MlslAst.p_pos value tp.MlslAst.tt_typ)
 	| MlslAst.PTrue ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value with
 		| TopDef.VBool true  -> ()
 		| _ ->
 			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
@@ -510,7 +485,7 @@ let rec bind_top_pattern pat value =
 			raise Eval_exception
 		end
 	| MlslAst.PFalse ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value with
 		| TopDef.VBool false -> ()
 		| _ ->
 			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
@@ -518,17 +493,17 @@ let rec bind_top_pattern pat value =
 			raise Eval_exception
 		end
 	| MlslAst.PPair(pat1, pat2) ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value with
 		| TopDef.VPair(v1, v2) ->
-			bind_top_pattern pat1 (fix_value v1);
-			bind_top_pattern pat2 (fix_value v2)
+			bind_top_pattern pat1 v1;
+			bind_top_pattern pat2 v2
 		| _ ->
 			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
 				(Errors.string_of_pos value.TopDef.v_pos);
 			raise Eval_exception
 		end
 	| MlslAst.PConstrU name ->
-		begin match value.TopDef.v_kind with
+		begin match value_kind pat.MlslAst.p_pos value with
 		| TopDef.VConstrU name' when name = name' -> ()
 		| _ ->
 			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
@@ -536,8 +511,8 @@ let rec bind_top_pattern pat value =
 			raise Eval_exception
 		end
 	| MlslAst.PConstrP(name, p) ->
-		begin match value.TopDef.v_kind with
-		| TopDef.VConstrP(name', v) when name = name' -> bind_top_pattern p (fix_value v)
+		begin match value_kind pat.MlslAst.p_pos value with
+		| TopDef.VConstrP(name', v) when name = name' -> bind_top_pattern p v
 		| _ ->
 			Errors.error_p pat.MlslAst.p_pos "Can not bind value defined at %s to this pattern."
 				(Errors.string_of_pos value.TopDef.v_pos);
@@ -563,7 +538,7 @@ let eval_topdef td =
 		begin try
 			let value = eval StrMap.empty expr in
 			TopDef.add name value;
-			Misc.Opt.iter (Midlang.unfold_shader name value) (fun mprog ->
+			Misc.Opt.iter (Midlang.unfold_shader td.MlslAst.td_pos name value) (fun mprog ->
 			let mprog_opt = Midlang.optimize mprog in
 			!target_func mprog_opt
 			)

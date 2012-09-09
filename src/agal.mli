@@ -90,6 +90,7 @@ type instr_kind =
 | IMul of dest * source * source
 | IDiv of dest * source * source
 | IMin of dest * source * source
+| IMax of dest * source * source
 | IFrc of dest * source
 | IPow of dest * source * source
 | ICrs of dest * source * source

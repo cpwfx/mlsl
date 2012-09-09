@@ -145,7 +145,7 @@ type shader =
 	; sh_fragment : instr list
 	}
 
-val unfold_shader : string -> TopDef.value -> shader option
+val unfold_shader : Errors.position -> string -> TopDef.value -> shader option
 
 val optimize : shader -> shader
 

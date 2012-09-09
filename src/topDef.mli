@@ -1,8 +1,8 @@
 (* File: topDef.mli *)
 
 type value =
-	{ v_pos  : Errors.position
-	; v_kind : value_kind
+	{         v_pos  : Errors.position
+	; mutable v_kind : value_kind option
 	}
 and value_kind =
 | VAttr     of string  * MlslAst.attr_semantics * MlslAst.typ_term
@@ -20,7 +20,6 @@ and value_kind =
 | VFunc     of closure * MlslAst.pattern * MlslAst.expr
 | VConstrU  of string
 | VConstrP  of string * value
-| VFixed    of value option ref
 and closure = value Map.Make(String).t
 
 val string_of_value_kind : value_kind -> string
@@ -28,6 +27,8 @@ val string_of_value_kind : value_kind -> string
 val empty_context : closure
 
 val make_value : Errors.position -> value_kind -> value
+
+val make_value_stub : Errors.position -> value
 
 val add : string -> value -> unit
 

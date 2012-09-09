@@ -3,8 +3,8 @@
 module StrMap = Map.Make(String)
 
 type value =
-	{ v_pos  : Errors.position
-	; v_kind : value_kind
+	{         v_pos  : Errors.position
+	; mutable v_kind : value_kind option
 	}
 and value_kind =
 | VAttr     of string  * MlslAst.attr_semantics * MlslAst.typ_term
@@ -22,7 +22,6 @@ and value_kind =
 | VFunc     of closure * MlslAst.pattern * MlslAst.expr
 | VConstrU  of string
 | VConstrP  of string * value
-| VFixed    of value option ref
 and closure = value Map.Make(String).t
 
 let string_of_value_kind kind =
@@ -42,13 +41,17 @@ let string_of_value_kind kind =
 	| VFunc _ -> "function"
 	| VConstrU name -> "constructor " ^ name
 	| VConstrP(name, _) -> "constructor " ^ name ^ "with value"
-	| VFixed _ -> "fixed value"
 
 let empty_context = StrMap.empty
 
 let make_value pos kind =
 	{ v_pos  = pos
-	; v_kind = kind
+	; v_kind = Some kind
+	}
+
+let make_value_stub pos =
+	{ v_pos  = pos
+	; v_kind = None
 	}
 
 let topdef_map = Hashtbl.create 32
