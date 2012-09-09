@@ -1,0 +1,14 @@
+const projMatrix  : mat44
+const col         : vec4
+
+attr POSITION pos : vec4
+
+let vertex vs =
+	{ position = projMatrix * pos
+	; col = col
+	}
+
+let fragment fs =
+	$col % 1
+
+let shader const_test = (vs, fs)

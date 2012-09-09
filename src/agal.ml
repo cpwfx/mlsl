@@ -96,6 +96,7 @@ type instr_kind =
 | IDp3 of dest * source * source
 | IDp4 of dest * source * source
 | INeg of dest * source
+| ISat of dest * source
 | IM33 of dest * source * source
 | IM44 of dest * source * source
 | IM34 of dest * source * source
@@ -146,8 +147,8 @@ let instr_dest instr =
 	| IMul(dest, _, _) | IDiv(dest, _, _) | IMin(dest, _, _)
 	| IFrc(dest, _)    | IPow(dest, _, _) | ICrs(dest, _, _) 
 	| IDp3(dest, _, _) | IDp4(dest, _, _) | INeg(dest, _)    
-	| IM33(dest, _, _) | IM44(dest, _, _) | IM34(dest, _, _) 
-	| ITex(dest, _, _) | ICrs2(dest, _, _) -> dest
+	| ISat(dest, _)    | IM33(dest, _, _) | IM44(dest, _, _) 
+	| IM34(dest, _, _) | ITex(dest, _, _) | ICrs2(dest, _, _) -> dest
 
 (* ========================================================================= *)
 
@@ -424,6 +425,12 @@ let make_const_float value =
 	; src_swizzle = [| 0; 0; 0; 0 |]
 	; src_offset  = None
 	}
+let make_const_vec dim value =
+	{ src_var     = get_const_reg [ Array.to_list value ]
+	; src_row     = 0
+	; src_swizzle = [| 0; 0; 0; 0 |]
+	; src_offset  = None
+	}
 
 let create_instr kind =
 	{ ins_id   = Misc.Fresh.next fresh_ins
@@ -432,7 +439,13 @@ let create_instr kind =
 
 let build_binop rv r1 r2 op =
 	match op with
-	| Midlang.BOAddF ->
+	| Midlang.BOOrB ->
+		let tmp = make_temp_reg 1 1 in
+		Some
+		[ create_instr (IAdd(make_dest_float_reg tmp, make_source r1, make_source r2))
+		; create_instr (ISat(make_dest_float rv, make_source_reg tmp))
+		]
+	| Midlang.BOAddI | Midlang.BOAddF ->
 		Some [create_instr (IAdd(make_dest_float rv, make_source r1, make_source r2))]
 	| Midlang.BOAddM(dim1, dim) ->
 		Some (List.map (fun row -> create_instr (IAdd(
@@ -442,7 +455,7 @@ let build_binop rv r1 r2 op =
 				) (Misc.Dim.range_of_dim dim1))
 	| Midlang.BOAddV dim ->
 		Some [create_instr (IAdd(make_dest dim rv, make_source r1, make_source r2))]
-	| Midlang.BOSubF ->
+	| Midlang.BOSubI | Midlang.BOSubF ->
 		Some [create_instr (ISub(make_dest_float rv, make_source r1, make_source r2))]
 	| Midlang.BOSubM(dim1, dim) ->
 		Some (List.map (fun row -> create_instr (ISub(
@@ -452,7 +465,7 @@ let build_binop rv r1 r2 op =
 				) (Misc.Dim.range_of_dim dim1))
 	| Midlang.BOSubV dim ->
 		Some [create_instr (ISub(make_dest dim rv, make_source r1, make_source r2))]
-	| Midlang.BOMulFF ->
+	| Midlang.BOAndB | Midlang.BOMulI | Midlang.BOMulFF ->
 		Some [create_instr (IMul(make_dest_float rv, make_source r1, make_source r2))]
 	| Midlang.BOMulMF(dim1, dim) ->
 		Some (List.map (fun row -> create_instr (IMul(
@@ -507,8 +520,17 @@ let build_binop rv r1 r2 op =
 	| Midlang.BOMulVV dim ->
 		Some [create_instr
 			(IMul(make_dest dim rv, make_source r1, make_source r2))]
+	| Midlang.BODivI ->
+		let tmp1 = make_temp_reg 1 1 in
+		let tmp2 = make_temp_reg 1 1 in
+		Some
+		[ create_instr (IDiv(make_dest_float_reg tmp1, make_source_float r1, make_source_float r2))
+		; create_instr (IFrc(make_dest_float_reg tmp2, make_source_reg tmp1))
+		; create_instr (ISub(make_dest_float rv, make_source_reg tmp1, make_source_reg tmp2))
+		]
 	| Midlang.BODivFF ->
-		Some [create_instr
+		Some
+		[ create_instr
 			(IDiv(make_dest_float rv, make_source_float r1, make_source_float r2))]
 	| Midlang.BODivFV dim ->
 		Some [create_instr
@@ -525,7 +547,7 @@ let build_binop rv r1 r2 op =
 	| Midlang.BODivVV dim ->
 		Some [create_instr
 			(IDiv(make_dest dim rv, make_source_dim dim r1, make_source_dim dim r2))]
-	| Midlang.BOModFF ->
+	| Midlang.BOModI | Midlang.BOModFF ->
 		let tmp1 = make_temp_reg 1 1 in
 		let tmp2 = make_temp_reg 1 1 in
 		Some
@@ -604,7 +626,7 @@ let build_binop rv r1 r2 op =
 	| Midlang.BOCross3 ->
 		Some [create_instr 
 			(ICrs(make_dest Misc.Dim.Dim3 rv, make_source r1, make_source r2))]
-	| Midlang.BOPowFF ->
+	| Midlang.BOPowI | Midlang.BOPowFF ->
 		Some [create_instr 
 			(IPow(make_dest_float rv, make_source_float r1, make_source_float r2))]
 	| Midlang.BOPowVF dim ->
@@ -613,7 +635,7 @@ let build_binop rv r1 r2 op =
 	| Midlang.BOPowVV dim ->
 		Some [create_instr 
 			(IPow(make_dest dim rv, make_source_dim dim r1, make_source_dim dim r2))]
-	| Midlang.BOMinF ->
+	| Midlang.BOMinI | Midlang.BOMinF ->
 		Some [create_instr
 			(IMin(make_dest_float rv, make_source_float r1, make_source_float r2))]
 	| Midlang.BOMinV dim ->
@@ -622,7 +644,9 @@ let build_binop rv r1 r2 op =
 
 let build_unop rv r1 op =
 	match op with
-	| Midlang.UONegF ->
+	| Midlang.UONotB ->
+		Some [create_instr(ISub(make_dest_float rv, make_const_float 1.0, make_source_float r1))]
+	| Midlang.UONegI | Midlang.UONegF ->
 		Some [create_instr(INeg(make_dest_float rv, make_source_float r1))]
 	| Midlang.UONegM(dim1, dim) ->
 		Some (List.map (fun row -> 
@@ -643,21 +667,30 @@ let build_ins globals ins =
 		| Midlang.TVec dim ->
 			Some [create_instr (IMov(make_dest dim dst, make_source src))]
 		end
-	| Midlang.IConstBool _ ->
-		Errors.error "Unimplemented: Agal.build_ins IConstBool.";
-		None
-	| Midlang.IConstInt _ ->
-		Errors.error "Unimplemented: Agal.build_ins IConstInt.";
-		None
-	| Midlang.IConstFloat _ ->
-		Errors.error "Unimplemented: Agal.build_ins IConstFloat.";
-		None
-	| Midlang.IConstVec _ ->
-		Errors.error "Unimplemented: Agal.build_ins IConstVec.";
-		None
-	| Midlang.IConstMat _ ->
+	| Midlang.IConstBool(dst, b) ->
+		Some [create_instr (IMov(
+			make_dest_float dst, 
+			make_const_float (if b then 1.0 else 0.0)))]
+	| Midlang.IConstInt(dst, i) ->
+		Some [create_instr (IMov(
+			make_dest_float dst,
+			make_const_float (float_of_int i)))]
+	| Midlang.IConstFloat(dst, f) ->
+		Some [create_instr (IMov(
+			make_dest_float dst,
+			make_const_float f))]
+	| Midlang.IConstVec(dst, dim, v) ->
+		Some [create_instr (IMov(
+			make_dest_float dst,
+			make_const_vec dim v))]
+	| Midlang.IConstMat(dst, d1, d2, m) ->
 		Errors.error "Unimplemented: Agal.build_ins IConstMat.";
 		None
+	| Midlang.IConvert(rv, r1, conv) ->
+		begin match conv with
+		| Midlang.CBool2Int | Midlang.CBool2Float | Midlang.CInt2Float ->
+			Some [create_instr (IMov(make_dest_float rv, make_source_float r1))]
+		end
 	| Midlang.IBinOp(rv, r1, r2, op) ->
 		build_binop rv r1 r2 op
 	| Midlang.IUnOp(rv, r1, op) ->
@@ -728,7 +761,8 @@ module LiveVar = struct
 
 	let transfer instr a =
 		match instr.ins_kind with
-		| IMov(_, src) | IFrc(_, src) | INeg(_, src) | ITex(_, src, _) -> 
+		| IMov(_, src) | IFrc(_, src) | INeg(_, src) | ISat(_, src) 
+		| ITex(_, src, _) -> 
 			VarSet.add src.src_var a
 		| IAdd(_, src1, src2) | ISub(_, src1, src2) | IMul(_, src1, src2)
 		| IDiv(_, src1, src2) | IMin(_, src1, src2) | IPow(_, src1, src2) 
@@ -757,7 +791,7 @@ module Vec3Output = struct
 	let compute_instr instr =
 		match instr with
 		| IMov _ | IAdd _ | ISub _ | IMul _ | IDiv _ | IMin _ | IFrc _ 
-		| IPow _ | IDp3 _ | IDp4 _ | INeg _ | IM44 _ | ITex _ -> 
+		| IPow _ | IDp3 _ | IDp4 _ | INeg _ | ISat _ | IM44 _ | ITex _ -> 
 			()
 		| ICrs(dest, _, _) | IM33(dest, _, _) | IM34(dest, _, _) 
 		| ICrs2(dest, _, _) ->
@@ -1121,6 +1155,11 @@ let rec write_bytecode out code =
 			write_dest out dst;
 			write_source out src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
 			LittleEndian.write_int64 out Int64.zero (* dummy source *)
+		| ISat(dst, src) ->
+			LittleEndian.write_int out 0x16;
+			write_dest out dst;
+			write_source out src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+			LittleEndian.write_int64 out Int64.zero (* dummy source *)
 		| IM33(dst, src1, src2) ->
 			LittleEndian.write_int out 0x17;
 			write_dest out dst;
@@ -1312,6 +1351,9 @@ let rec write_asm vertex out code =
 			(write_source_asm vertex src1 0)
 			(write_source_asm vertex src2 0)
 		| INeg(dst, src) -> Printf.fprintf out "neg %s, %s\n"
+			(write_dest_asm vertex dst)
+			(write_source_asm vertex src (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		| ISat(dst, src) -> Printf.fprintf out "sat %s, %s\n"
 			(write_dest_asm vertex dst)
 			(write_source_asm vertex src (snd (Misc.Opt.value (dst.dst_var.var_reg))))
 		| IM33(dst, src1, src2) -> Printf.fprintf out "m33 %s, %s, %s\n"

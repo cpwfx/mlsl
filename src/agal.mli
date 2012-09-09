@@ -96,6 +96,7 @@ type instr_kind =
 | IDp3 of dest * source * source
 | IDp4 of dest * source * source
 | INeg of dest * source
+| ISat of dest * source
 | IM33 of dest * source * source
 | IM44 of dest * source * source
 | IM34 of dest * source * source

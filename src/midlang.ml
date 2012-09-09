@@ -68,24 +68,36 @@ type param =
 	; param_var  : variable
 	}
 
+type conversion =
+| CBool2Int
+| CBool2Float
+| CInt2Float
+
 type binop =
+| BOOrB
+| BOAndB
+| BOAddI
 | BOAddF
 | BOAddM  of dim * dim
 | BOAddV  of dim
+| BOSubI
 | BOSubF
 | BOSubM  of dim * dim
 | BOSubV  of dim
+| BOMulI
 | BOMulFF
 | BOMulMF of dim * dim
 | BOMulMM of dim * dim * dim
 | BOMulMV of dim * dim
 | BOMulVF of dim
 | BOMulVV of dim
+| BODivI
 | BODivFF
 | BODivFV of dim
 | BODivMF of dim * dim
 | BODivVF of dim
 | BODivVV of dim
+| BOModI
 | BOModFF
 | BOModFV of dim
 | BOModMF of dim * dim
@@ -94,13 +106,17 @@ type binop =
 | BODot   of dim
 | BOCross2
 | BOCross3
+| BOPowI
 | BOPowFF
 | BOPowVF of dim
 | BOPowVV of dim
+| BOMinI
 | BOMinF
 | BOMinV  of dim
 
 type unop =
+| UONotB
+| UONegI
 | UONegF
 | UONegM of dim * dim
 | UONegV of dim
@@ -112,6 +128,7 @@ type instr_kind =
 | IConstFloat of variable * float
 | IConstVec   of variable * dim * float array
 | IConstMat   of variable * dim * dim * float array array
+| IConvert    of variable * variable * conversion
 | IBinOp      of variable * variable * variable * binop
 | IUnOp       of variable * variable * unop
 | ISwizzle    of variable * variable * MlslAst.Swizzle.t
@@ -463,136 +480,268 @@ let rec bind_pattern code gamma pat rv =
 		Errors.error_p pat.MlslAst.p_pos "Unimplemented: bind_pattern PConstrP";
 		raise Unfold_exception
 
-let typ_and_ins_of_add pos tp1 tp2 =
-	match tp1, tp2 with
-	| TFloat, TFloat -> 
-		(TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOAddF))
+let ins tp f code =
+	let rreg = create_variable VSTemporary tp in
+	Misc.ImpList.add code (create_instr (f rreg));
+	rreg
+let ins_convert_i2f code reg       = 
+	ins TFloat (fun rr -> IConvert(rr, reg, CInt2Float)) code
+let ins_binop tp op code reg1 reg2 = 
+	ins tp (fun rr -> IBinOp(rr, reg1, reg2, op)) code
+let ins_unop tp op code reg =
+	ins tp (fun rr -> IUnOp(rr, reg, op)) code
+
+let ins_binop_add_i           = ins_binop TInt   BOAddI
+let ins_binop_add_f           = ins_binop TFloat BOAddF
+let ins_binop_add_v d         = ins_binop (TVec d) (BOAddV d)
+let ins_binop_add_m d1 d2     = ins_binop (TMat(d1, d2)) (BOAddM(d1, d2))
+let ins_binop_sub_i           = ins_binop TInt   BOSubI
+let ins_binop_sub_f           = ins_binop TFloat BOSubF
+let ins_binop_sub_v d         = ins_binop (TVec d) (BOSubV d)
+let ins_binop_sub_m d1 d2     = ins_binop (TMat(d1, d2)) (BOSubM(d1, d2))
+let ins_binop_mul_i           = ins_binop TInt   BOMulI
+let ins_binop_mul_ff          = ins_binop TFloat BOMulFF
+let ins_binop_mul_vf d        = ins_binop (TVec d) (BOMulVF d)
+let ins_binop_mul_vv d        = ins_binop (TVec d) (BOMulVV d)
+let ins_binop_mul_mf d1 d2    = ins_binop (TMat(d1, d2)) (BOMulMF(d1, d2))
+let ins_binop_mul_mv d1 d2    = ins_binop (TVec d1) (BOMulMV(d1, d2))
+let ins_binop_mul_mm d1 d2 d3 = ins_binop (TMat(d1, d3)) (BOMulMM(d1, d2, d3))
+let ins_binop_div_i           = ins_binop TInt   BODivI
+let ins_binop_div_ff          = ins_binop TFloat BODivFF
+let ins_binop_div_fv d        = ins_binop (TVec d) (BODivFV d)
+let ins_binop_div_vf d        = ins_binop (TVec d) (BODivVF d)
+let ins_binop_div_vv d        = ins_binop (TVec d) (BODivVV d)
+let ins_binop_div_mf d1 d2    = ins_binop (TMat(d1, d2)) (BODivMF(d1, d2))
+let ins_binop_mod_i           = ins_binop TInt   BOModI
+let ins_binop_mod_ff          = ins_binop TFloat BOModFF
+let ins_binop_mod_fv d        = ins_binop (TVec d) (BOModFV d)
+let ins_binop_mod_vf d        = ins_binop (TVec d) (BOModVF d)
+let ins_binop_mod_vv d        = ins_binop (TVec d) (BOModVV d)
+let ins_binop_mod_mf d1 d2    = ins_binop (TMat(d1, d2)) (BOModMF(d1, d2))
+let ins_binop_dot d           = ins_binop TFloat (BODot d)
+let ins_binop_cross2          = ins_binop TFloat BOCross2
+let ins_binop_cross3          = ins_binop (TVec Dim3) BOCross3
+let ins_binop_pow_i           = ins_binop TInt BOPowI
+let ins_binop_pow_ff          = ins_binop TFloat BOPowFF
+let ins_binop_pow_vf d        = ins_binop (TVec d) (BOPowVF d)
+let ins_binop_pow_vv d        = ins_binop (TVec d) (BOPowVV d)
+let ins_binop_min_i           = ins_binop TInt BOMinI
+let ins_binop_min_f           = ins_binop TFloat BOMinF
+let ins_binop_min_v d         = ins_binop (TVec d) (BOMinV d)
+
+let ins_unop_neg_i       = ins_unop TInt UONegI
+let ins_unop_neg_f       = ins_unop TFloat UONegF
+let ins_unop_neg_v d     = ins_unop (TVec d) (UONegV d)
+let ins_unop_neg_m d1 d2 = ins_unop (TMat(d1, d2)) (UONegM(d1, d2))
+
+let unfold_add pos code reg1 reg2 =
+	match reg1.var_typ, reg2.var_typ with
+	| TInt, TInt ->
+		make_reg_value pos (RVReg (ins_binop_add_i code reg1 reg2))
+	| TInt, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_add_f code (ins_convert_i2f code reg1) reg2))
+	| TFloat, TInt ->
+		make_reg_value pos (RVReg (ins_binop_add_f code reg1 (ins_convert_i2f code reg2)))
+	| TFloat, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_add_f code reg1 reg2))
 	| TMat(d1, d2), TMat(d1', d2') when d1 = d1' && d2 = d2' ->
-		(TMat(d1, d2), fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOAddM(d1, d2)))
+		make_reg_value pos (RVReg (ins_binop_add_m d1 d2 code reg1 reg2))
 	| TVec d, TVec d' when d = d' ->
-		(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOAddV d))
-	| _ ->
+		make_reg_value pos (RVReg (ins_binop_add_v d code reg1 reg2))
+	| tp1, tp2 ->
 		Errors.error_p pos "Addition for types %s * %s is not defined."
 			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
-let typ_and_ins_of_sub pos tp1 tp2 =
-	match tp1, tp2 with
-	| TFloat, TFloat -> 
-		(TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOSubF))
+let unfold_sub pos code reg1 reg2 =
+	match reg1.var_typ, reg2.var_typ with
+	| TInt, TInt ->
+		make_reg_value pos (RVReg (ins_binop_sub_i code reg1 reg2))
+	| TInt, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_sub_f code (ins_convert_i2f code reg1) reg2))
+	| TFloat, TInt ->
+		make_reg_value pos (RVReg (ins_binop_sub_f code reg1 (ins_convert_i2f code reg1)))
+	| TFloat, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_sub_f code reg1 reg2))
 	| TMat(d1, d2), TMat(d1', d2') when d1 = d1' && d2 = d2' ->
-		(TMat(d1, d2), fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOSubM(d1, d2)))
+		make_reg_value pos (RVReg (ins_binop_sub_m d1 d2 code reg1 reg2))
 	| TVec d, TVec d' when d = d' ->
-		(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOSubV d))
-	| _ ->
+		make_reg_value pos (RVReg (ins_binop_sub_v d code reg1 reg2))
+	| tp1, tp2 ->
 		Errors.error_p pos "Subtraction for types %s * %s is not defined."
 			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
-let typ_and_ins_of_mul pos tp1 tp2 =
-	match tp1, tp2 with
-	| TFloat, TFloat -> (TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulFF))
-	| TFloat, TMat(d1, d2) -> 
-		(TMat(d1, d2), fun r1 r2 r3 -> IBinOp(r1, r3, r2, BOMulMF(d1, d2)))
+let unfold_mul pos code reg1 reg2 =
+	match reg1.var_typ, reg2.var_typ with
+	| TInt, TInt ->
+		make_reg_value pos (RVReg (ins_binop_mul_i code reg1 reg2))
+	| TInt, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_mul_ff code (ins_convert_i2f code reg1) reg2))
+	| TFloat, TInt ->
+		make_reg_value pos (RVReg (ins_binop_mul_ff code reg1 (ins_convert_i2f code reg2)))
+	| TFloat, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_mul_ff code reg1 reg2))
+	| TInt, TMat(d1, d2) ->
+		make_reg_value pos (RVReg (ins_binop_mul_mf d1 d2 code reg2 (ins_convert_i2f code reg1)))
+	| TFloat, TMat(d1, d2) ->
+		make_reg_value pos (RVReg (ins_binop_mul_mf d1 d2 code reg2 reg1))
+	| TInt, TVec d ->
+		make_reg_value pos (RVReg (ins_binop_mul_vf d code reg2 (ins_convert_i2f code reg1)))
 	| TFloat, TVec d ->
-		(TVec d, fun r1 r2 r3 -> IBinOp(r1, r3, r2, BOMulVF d))
+		make_reg_value pos (RVReg (ins_binop_mul_vf d code reg2 reg1))
+	| TMat(d1, d2), TInt ->
+		make_reg_value pos (RVReg (ins_binop_mul_mf d1 d2 code reg1 (ins_convert_i2f code reg2)))
 	| TMat(d1, d2), TFloat ->
-		(TMat(d1, d2), fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulMF(d1, d2)))
+		make_reg_value pos (RVReg (ins_binop_mul_mf d1 d2 code reg1 reg2))
 	| TMat(d1, d2), TMat(d3, d4) when d2 = d3 ->
-		(TMat(d1, d4), fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulMM(d1, d2, d4)))
-	| TMat(d1, d2), TVec d when d2 = d -> 
-		(TVec d1,  fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulMV(d1, d2)))
-	| TVec d, TFloat  -> (TVec d,  fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulVF d))
+		make_reg_value pos (RVReg (ins_binop_mul_mm d1 d2 d4 code reg1 reg2))
+	| TMat(d1, d2), TVec d when d2 = d ->
+		make_reg_value pos (RVReg (ins_binop_mul_mv d1 d2 code reg1 reg2))
+	| TVec d, TInt ->
+		make_reg_value pos (RVReg (ins_binop_mul_vf d code reg1 (ins_convert_i2f code reg2)))
+	| TVec d, TFloat  ->
+		make_reg_value pos (RVReg (ins_binop_mul_vf d code reg1 reg2))
 	| TVec d1, TVec d2 when d1 = d2 ->
-		(TVec d1, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulVV d1))
-	| _ ->
+		make_reg_value pos (RVReg (ins_binop_mul_vv d1 code reg1 reg2))
+	| tp1, tp2 ->
 		Errors.error_p pos "Multiplication for types %s * %s is not defined."
 			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
-let typ_and_ins_of_div pos tp1 tp2 =
-	match tp1, tp2 with
-	| TFloat, TFloat -> (TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODivFF))
-	| TFloat, TVec d -> (TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODivFV d))
+let unfold_div pos code reg1 reg2 =
+	match reg1.var_typ, reg2.var_typ with
+	| TInt, TInt ->
+		make_reg_value pos (RVReg (ins_binop_div_i code reg1 reg2))
+	| TInt, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_div_ff code (ins_convert_i2f code reg1) reg2))
+	| TFloat, TInt ->
+		make_reg_value pos (RVReg (ins_binop_div_ff code reg1 (ins_convert_i2f code reg2)))
+	| TFloat, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_div_ff code reg1 reg2))
+	| TInt, TVec d ->
+		make_reg_value pos (RVReg (ins_binop_div_fv d code (ins_convert_i2f code reg1) reg2))
+	| TFloat, TVec d ->
+		make_reg_value pos (RVReg (ins_binop_div_fv d code reg1 reg2))
+	| TMat(d1, d2), TInt ->
+		make_reg_value pos (RVReg (ins_binop_div_mf d1 d2 code reg1 (ins_convert_i2f code reg2)))
 	| TMat(d1, d2), TFloat -> 
-		(TMat(d1, d2), fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODivMF(d1, d2)))
-	| TVec d, TFloat -> (TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODivVF d))
+		make_reg_value pos (RVReg (ins_binop_div_mf d1 d2 code reg1 reg2))
+	| TVec d, TInt ->
+		make_reg_value pos (RVReg (ins_binop_div_vf d code reg1 (ins_convert_i2f code reg2)))
+	| TVec d, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_div_vf d code reg1 reg2))
 	| TVec d, TVec d' when d = d' ->
-		(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODivVV d))
-	| _ ->
+		make_reg_value pos (RVReg (ins_binop_div_vv d code reg1 reg2))
+	| tp1, tp2 ->
 		Errors.error_p pos "Division for types %s * %s is not defined."
 			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
-let typ_and_ins_of_mod pos tp1 tp2 =
-	match tp1, tp2 with
-	| TFloat, TFloat -> (TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOModFF))
-	| TFloat, TVec d -> (TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOModFV d))
+let unfold_mod pos code reg1 reg2 =
+	match reg1.var_typ, reg2.var_typ with
+	| TInt, TInt ->
+		make_reg_value pos (RVReg (ins_binop_mod_i code reg1 reg2))
+	| TInt, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_mod_ff code (ins_convert_i2f code reg1) reg2))
+	| TFloat, TInt ->
+		make_reg_value pos (RVReg (ins_binop_mod_ff code reg1 (ins_convert_i2f code reg2)))
+	| TFloat, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_mod_ff code reg1 reg2))
+	| TInt, TVec d ->
+		make_reg_value pos (RVReg (ins_binop_mod_fv d code (ins_convert_i2f code reg1) reg2))
+	| TFloat, TVec d ->
+		make_reg_value pos (RVReg (ins_binop_mod_fv d code reg1 reg2))
+	| TMat(d1, d2), TInt ->
+		make_reg_value pos (RVReg (ins_binop_mod_mf d1 d2 code reg1 (ins_convert_i2f code reg2)))
 	| TMat(d1, d2), TFloat ->
-		(TMat(d1, d2), fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOModMF(d1, d2)))
-	| TVec d, TFloat -> (TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOModVF d))
+		make_reg_value pos (RVReg (ins_binop_mod_mf d1 d2 code reg1 reg2))
+	| TVec d, TInt ->
+		make_reg_value pos (RVReg (ins_binop_mod_vf d code reg1 (ins_convert_i2f code reg2)))
+	| TVec d, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_mod_vf d code reg1 reg2))
 	| TVec d, TVec d' when d = d' ->
-		(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOModVV d))
-	| _ ->
+		make_reg_value pos (RVReg (ins_binop_mod_vv d code reg1 reg2))
+	| tp1, tp2 ->
 		Errors.error_p pos "Modulo for types %s * %s is not defined."
 			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
-let typ_and_ins_of_dot pos tp1 tp2 =
-	match tp1, tp2 with
-	| TFloat, TFloat -> (TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMulFF))
-	| TVec d, TVec d' when d = d' -> 
-		(TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BODot d))
-	| _ ->
+let unfold_dot pos code reg1 reg2 =
+	match reg1.var_typ, reg2.var_typ with
+	| (TInt | TFloat), (TInt | TFloat) ->
+		unfold_mul pos code reg1 reg2
+	| TVec d, TVec d' when d = d' ->
+		make_reg_value pos (RVReg (ins_binop_dot d code reg1 reg2))
+	| tp1, tp2 ->
 		Errors.error_p pos "Dot product for types %s * %s is not defined."
 			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
-let typ_and_ins_of_cross pos tp1 tp2 =
-	match tp1, tp2 with
-	| TVec Dim2, TVec Dim2 -> (TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOCross2))
-	| TVec Dim3, TVec Dim3 -> (TVec Dim3, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOCross3))
-	| _ ->
+let unfold_cross pos code reg1 reg2 =
+	match reg1.var_typ, reg2.var_typ with
+	| TVec Dim2, TVec Dim2 ->
+		make_reg_value pos (RVReg (ins_binop_cross2 code reg1 reg2))
+	| TVec Dim3, TVec Dim3 ->
+		make_reg_value pos (RVReg (ins_binop_cross3 code reg1 reg2))
+	| tp1, tp2 ->
 		Errors.error_p pos "Cross product for types %s * %s is not defined."
 			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
-let typ_and_ins_of_pow pos tp1 tp2 =
-	match tp1, tp2 with
-	| TFloat, TFloat -> (TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOPowFF))
-	| TVec d, TFloat -> (TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOPowVF d))
+let unfold_pow pos code reg1 reg2 =
+	match reg1.var_typ, reg2.var_typ with
+	| TInt, TInt ->
+		make_reg_value pos (RVReg (ins_binop_pow_i code reg1 reg2))
+	| TInt, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_pow_ff code (ins_convert_i2f code reg1) reg2))
+	| TFloat, TInt ->
+		make_reg_value pos (RVReg (ins_binop_pow_ff code reg1 (ins_convert_i2f code reg2)))
+	| TFloat, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_pow_ff code reg1 reg2))
+	| TVec d, TInt ->
+		make_reg_value pos (RVReg (ins_binop_pow_vf d code reg1 (ins_convert_i2f code reg2)))
+	| TVec d, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_pow_vf d code reg1 reg2))
 	| TVec d, TVec d' when d = d' ->
-		(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOPowVV d))
-	| _ ->
+		make_reg_value pos (RVReg (ins_binop_pow_vv d code reg1 reg2))
+	| tp1, tp2 ->
 		Errors.error_p pos "Power for types %s * %s is not defined."
 			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
-let typ_and_ins_of_min pos tp1 tp2 =
-	match tp1, tp2 with
-	| TFloat, TFloat -> (TFloat, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMinF))
+let unfold_min pos code reg1 reg2 =
+	match reg1.var_typ, reg2.var_typ with
+	| TInt, TInt ->
+		make_reg_value pos (RVReg (ins_binop_min_i code reg1 reg2))
+	| TInt, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_min_f code (ins_convert_i2f code reg1) reg2))
+	| TFloat, TInt ->
+		make_reg_value pos (RVReg (ins_binop_min_f code reg1 (ins_convert_i2f code reg2)))
+	| TFloat, TFloat ->
+		make_reg_value pos (RVReg (ins_binop_min_f code reg1 reg2))
 	| TVec d, TVec d' when d = d' ->
-		(TVec d, fun r1 r2 r3 -> IBinOp(r1, r2, r3, BOMinV d))
-	| _ ->
+		make_reg_value pos (RVReg (ins_binop_min_v d code reg1 reg2))
+	| tp1, tp2 ->
 		Errors.error_p pos "Minimum for types %s * %s is not defined."
 			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
-let typ_and_ins_of_neg pos tp =
-	match tp with
-	| TFloat -> (TFloat, fun r1 r2 -> IUnOp(r1, r2, UONegF))
-	| TMat(d1, d2) -> (TMat(d1, d2), fun r1 r2 -> IUnOp(r1, r2, UONegM(d1, d2)))
-	| TVec d -> (TVec d, fun r1 r2 -> IUnOp(r1, r2, UONegV d))
-	| _ ->
+let unfold_neg pos code reg =
+	match reg.var_typ with
+	| TInt -> make_reg_value pos (RVReg (ins_unop_neg_i code reg))
+	| TFloat -> make_reg_value pos (RVReg (ins_unop_neg_f code reg))
+	| TMat(d1, d2) -> make_reg_value pos (RVReg (ins_unop_neg_m d1 d2 code reg))
+	| TVec d -> make_reg_value pos (RVReg (ins_unop_neg_v d code reg))
+	| tp ->
 		Errors.error_p pos "Unary minus for type %s is not defined."
 			(string_of_typ tp);
 		raise Unfold_exception
 
-let typ_and_ins_of_uplus pos tp =
-	match tp with
-	| TFloat | TMat _ | TVec _ ->
-		(tp, fun r1 r2 -> IMov(r1, r2))
-	| _ ->
+let unfold_uplus pos code reg =
+	match reg.var_typ with
+	| TFloat | TMat _ | TVec _ -> make_reg_value pos (RVReg reg)
+	| tp ->
 		Errors.error_p pos "Unary plus for type %s is not defined."
 			(string_of_typ tp);
 		raise Unfold_exception
@@ -717,48 +866,44 @@ let unfold_binop pos program_type code op rkind1 rkind2 =
 	| _ ->
 		let r1 = register_of_const_or_reg pos code rkind1 in
 		let r2 = register_of_const_or_reg pos code rkind2 in
-		let (rtp, ins) = 
-			match op with
-			| MlslAst.BOEq ->
-				Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOEq, _, _)";
-				raise Unfold_exception
-			| MlslAst.BONeq ->
-				Errors.error_p pos "Unimplemented: unfold_code EBinOp(BONeq, _, _)";
-				raise Unfold_exception
-			| MlslAst.BOGe ->
-				Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOLe, _, _)";
-				raise Unfold_exception
-			| MlslAst.BOLt ->
-				Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOLt, _, _)";
-				raise Unfold_exception
-			| MlslAst.BOLe ->
-				Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOGe, _, _)";
-				raise Unfold_exception
-			| MlslAst.BOGt ->
-				Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOGt, _, _)";
-				raise Unfold_exception
-			| MlslAst.BOAdd ->
-				typ_and_ins_of_add pos r1.var_typ r2.var_typ
-			| MlslAst.BOSub ->
-				typ_and_ins_of_sub pos r1.var_typ r2.var_typ
-			| MlslAst.BOMul -> 
-				typ_and_ins_of_mul pos r1.var_typ r2.var_typ
-			| MlslAst.BODiv ->
-				typ_and_ins_of_div pos r1.var_typ r2.var_typ
-			| MlslAst.BOMod ->
-				typ_and_ins_of_mod pos r1.var_typ r2.var_typ
-			| MlslAst.BODot ->
-				typ_and_ins_of_dot pos r1.var_typ r2.var_typ
-			| MlslAst.BOCross ->
-				typ_and_ins_of_cross pos r1.var_typ r2.var_typ
-			| MlslAst.BOPow ->
-				typ_and_ins_of_pow pos r1.var_typ r2.var_typ
-			| MlslAst.BOMin ->
-				typ_and_ins_of_min pos r1.var_typ r2.var_typ
-		in
-		let rreg = create_variable VSTemporary rtp in
-		Misc.ImpList.add code (create_instr (ins rreg r1 r2));
-		make_reg_value pos (RVReg rreg)
+		begin match op with
+		| MlslAst.BOEq ->
+			Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOEq, _, _)";
+			raise Unfold_exception
+		| MlslAst.BONeq ->
+			Errors.error_p pos "Unimplemented: unfold_code EBinOp(BONeq, _, _)";
+			raise Unfold_exception
+		| MlslAst.BOGe ->
+			Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOLe, _, _)";
+			raise Unfold_exception
+		| MlslAst.BOLt ->
+			Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOLt, _, _)";
+			raise Unfold_exception
+		| MlslAst.BOLe ->
+			Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOGe, _, _)";
+			raise Unfold_exception
+		| MlslAst.BOGt ->
+			Errors.error_p pos "Unimplemented: unfold_code EBinOp(BOGt, _, _)";
+			raise Unfold_exception
+		| MlslAst.BOAdd ->
+			unfold_add pos code r1 r2
+		| MlslAst.BOSub ->
+			unfold_sub pos code r1 r2
+		| MlslAst.BOMul -> 
+			unfold_mul pos code r1 r2
+		| MlslAst.BODiv ->
+			unfold_div pos code r1 r2
+		| MlslAst.BOMod ->
+			unfold_mod pos code r1 r2
+		| MlslAst.BODot ->
+			unfold_dot pos code r1 r2
+		| MlslAst.BOCross ->
+			unfold_cross pos code r1 r2
+		| MlslAst.BOPow ->
+			unfold_pow pos code r1 r2
+		| MlslAst.BOMin ->
+			unfold_min pos code r1 r2
+		end
 
 let unfold_unop pos program_type code op kind =
 	match kind with
@@ -767,16 +912,12 @@ let unfold_unop pos program_type code op kind =
 			reg_value_of_value (EvalPrim.eval_unop pos op value)
 		)
 	| RVReg r ->
-		let (rtp, ins) =
-			match op with
-			| MlslAst.UONeg ->
-				typ_and_ins_of_neg pos r.var_typ
-			| MlslAst.UOPlus ->
-				typ_and_ins_of_uplus pos r.var_typ
-		in
-		let rreg = create_variable VSTemporary rtp in
-		Misc.ImpList.add code (create_instr (ins rreg r));
-		make_reg_value pos (RVReg rreg)
+		begin match op with
+		| MlslAst.UONeg ->
+			unfold_neg pos code r
+		| MlslAst.UOPlus ->
+			unfold_uplus pos code r
+		end
 	| kind ->
 		Errors.error_p pos 
 			"Operand of %s can not be a %s."

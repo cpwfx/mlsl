@@ -60,24 +60,36 @@ type param =
 	; param_var  : variable
 	}
 
+type conversion =
+| CBool2Int
+| CBool2Float
+| CInt2Float
+
 type binop =
+| BOOrB
+| BOAndB
+| BOAddI
 | BOAddF
 | BOAddM  of Misc.Dim.dim * Misc.Dim.dim
 | BOAddV  of Misc.Dim.dim
+| BOSubI
 | BOSubF
 | BOSubM  of Misc.Dim.dim * Misc.Dim.dim
 | BOSubV  of Misc.Dim.dim
+| BOMulI
 | BOMulFF
 | BOMulMF of Misc.Dim.dim * Misc.Dim.dim
 | BOMulMM of Misc.Dim.dim * Misc.Dim.dim * Misc.Dim.dim
 | BOMulMV of Misc.Dim.dim * Misc.Dim.dim
 | BOMulVF of Misc.Dim.dim
 | BOMulVV of Misc.Dim.dim
+| BODivI
 | BODivFF
 | BODivFV of Misc.Dim.dim
 | BODivMF of Misc.Dim.dim * Misc.Dim.dim
 | BODivVF of Misc.Dim.dim
 | BODivVV of Misc.Dim.dim
+| BOModI
 | BOModFF
 | BOModFV of Misc.Dim.dim
 | BOModMF of Misc.Dim.dim * Misc.Dim.dim
@@ -86,13 +98,17 @@ type binop =
 | BODot   of Misc.Dim.dim
 | BOCross2
 | BOCross3
+| BOPowI
 | BOPowFF
 | BOPowVF of Misc.Dim.dim
 | BOPowVV of Misc.Dim.dim
+| BOMinI
 | BOMinF
 | BOMinV  of Misc.Dim.dim
 
 type unop =
+| UONotB
+| UONegI
 | UONegF
 | UONegM of Misc.Dim.dim * Misc.Dim.dim
 | UONegV of Misc.Dim.dim
@@ -104,11 +120,12 @@ type instr_kind =
 | IConstFloat of variable * float
 | IConstVec   of variable * Misc.Dim.dim * float array
 | IConstMat   of variable * Misc.Dim.dim * Misc.Dim.dim * float array array
+| IConvert    of variable * variable * conversion
 | IBinOp      of variable * variable * variable * binop
 | IUnOp       of variable * variable * unop
 | ISwizzle    of variable * variable * MlslAst.Swizzle.t
 | ITex        of variable * variable * sampler
-| IRet     of variable
+| IRet        of variable
 type instr =
 	{ ins_id   : int
 	; ins_kind : instr_kind
