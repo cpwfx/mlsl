@@ -1,0 +1,33 @@
+
+const projMatrix  : mat44
+
+attr POSITION  pos   : vec4
+attr TEXCOORD0 coord : vec2
+
+sampler tex : sampler2D
+
+const bias : vec4
+
+let rec fold_int_range v0 v1 f acc =
+	if v0 > v1 then acc
+	else fold_int_range (v0 + 1) v1 f (f acc v0)
+
+let rec factorial n =
+	if n = 0 then 1
+	else n * factorial(n-1)
+
+let vertex vs =
+	{ position = projMatrix * pos
+	; coord    = coord
+	}
+
+let fragment fs =
+	let col = 10 * tex $coord in
+	fold_int_range 0 10 (fun acc i ->
+		if i % 4 = 0 then acc
+		else if i % 4 = 1 then acc + col ** i / factorial i
+		else if i % 4 = 2 then acc
+		else (* if i % 4 = 3 *) acc - col ** i / factorial i
+	) bias
+
+let shader awesome_shader = (vs, fs)

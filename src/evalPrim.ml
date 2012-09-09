@@ -2,6 +2,8 @@
 
 open Misc.Dim
 
+module StrMap = Map.Make(String)
+
 exception EvalPrim_exception
 
 let value_kind pos value =
@@ -67,26 +69,58 @@ let eval_swizzle pos v swizzle =
 
 (* ========================================================================= *)
 
+let rec eval_eq pos v1 v2 =
+	match value_kind pos v1, value_kind pos v2 with
+	| TopDef.VBool b1, TopDef.VBool b2 -> b1 = b2
+	| TopDef.VInt n1, TopDef.VInt n2 -> n1 = n2
+	| TopDef.VInt n1, TopDef.VFloat f2 -> float_of_int n1 = f2
+	| TopDef.VFloat f1, TopDef.VInt n2 -> f1 = float_of_int n2
+	| TopDef.VFloat f1, TopDef.VFloat f2 -> f1 = f2
+	| TopDef.VVec(d, v1), TopDef.VVec(d', v2) when d = d' ->
+		Misc.ArrayVec.equal v1 v2
+	| TopDef.VMat(d1, d2, m1), TopDef.VMat(d1', d2', m2) when d1 = d1' && d2 = d2' ->
+		Misc.ArrayMat.equal m1 m2
+	| TopDef.VRecord rd1, TopDef.VRecord rd2 ->
+		StrMap.equal (eval_eq pos) rd1 rd2
+	| TopDef.VPair(va1, vb1), TopDef.VPair(va2, vb2) ->
+		eval_eq pos va1 va2 && eval_eq pos vb1 vb2
+	| TopDef.VConstrU name1, TopDef.VConstrU name2 -> name1 = name2
+	| TopDef.VConstrP(name1, vp1), TopDef.VConstrP(name2, vp2) ->
+		name1 = name2 && eval_eq pos vp1 vp2
+	| kind1, kind2 ->
+		Errors.error_p pos "Equality between %s and %s is not defined."
+			(TopDef.string_of_value_kind kind1) (TopDef.string_of_value_kind kind2);
+		raise EvalPrim_exception
+
 let eval_binop pos op v1 v2 =
 	match op with
 	| MlslAst.BOEq ->
-		Errors.error_p pos "Unimpleneted: eval_binop BOEq";
-		raise EvalPrim_exception
+		TopDef.make_value pos (TopDef.VBool (eval_eq pos v1 v2))
 	| MlslAst.BONeq ->
-		Errors.error_p pos "Unimpleneted: eval_binop BONeq";
-		raise EvalPrim_exception
-	| MlslAst.BOLe ->
-		Errors.error_p pos "Unimpleneted: eval_binop BOLe";
-		raise EvalPrim_exception
-	| MlslAst.BOLt ->
-		Errors.error_p pos "Unimpleneted: eval_binop BOLt";
-		raise EvalPrim_exception
-	| MlslAst.BOGe ->
-		Errors.error_p pos "Unimpleneted: eval_binop BOGe";
-		raise EvalPrim_exception
-	| MlslAst.BOGt ->
-		Errors.error_p pos "Unimpleneted: eval_binop BOGt";
-		raise EvalPrim_exception
+		TopDef.make_value pos (TopDef.VBool (not (eval_eq pos v1 v2)))
+	| MlslAst.BOLe | MlslAst.BOLt | MlslAst.BOGe | MlslAst.BOGt ->
+		let (icmp, fcmp) =
+			match op with
+			| MlslAst.BOLe -> ( <= ), ( <= )
+			| MlslAst.BOLt -> ( <  ), ( <  )
+			| MlslAst.BOGe -> ( >= ), ( >= )
+			| MlslAst.BOGt -> ( >  ), ( >  )
+			| _ -> raise (Misc.Internal_error "You won the lottery!!!")
+		in
+		begin match value_kind pos v1, value_kind pos v2 with
+		| TopDef.VInt n1, TopDef.VInt n2 ->
+			TopDef.make_value pos (TopDef.VBool (icmp n1 n2))
+		| TopDef.VInt n1, TopDef.VFloat f2 ->
+			TopDef.make_value pos (TopDef.VBool (fcmp (float_of_int n1) f2))
+		| TopDef.VFloat f1, TopDef.VInt n2 ->
+			TopDef.make_value pos (TopDef.VBool (fcmp f1 (float_of_int n2)))
+		| TopDef.VFloat f1, TopDef.VFloat f2 ->
+			TopDef.make_value pos (TopDef.VBool (fcmp f1 f2))
+		| kind1, kind2 ->
+			Errors.error_p pos "Comparison between %s and %s is not defined."
+				(TopDef.string_of_value_kind kind1) (TopDef.string_of_value_kind kind2);
+			raise EvalPrim_exception
+		end
 	| MlslAst.BOAdd ->
 		begin match value_kind pos v1, value_kind pos v2 with
 		| TopDef.VInt n1, TopDef.VInt n2 -> 
@@ -102,7 +136,7 @@ let eval_binop pos op v1 v2 =
 		| TopDef.VMat(d1, d2, vm1), TopDef.VMat(d1', d2', vm2) when d1 = d1' && d2 = d2' ->
 			TopDef.make_value pos (TopDef.VMat(d1, d2, Misc.ArrayMat.add vm1 vm2))
 		| kind1, kind2 ->
-			Errors.error_p pos "Addition for %s and %s is not defined"
+			Errors.error_p pos "Addition for %s and %s is not defined."
 				(TopDef.string_of_value_kind kind1) (TopDef.string_of_value_kind kind2);
 			raise EvalPrim_exception
 		end
@@ -121,7 +155,7 @@ let eval_binop pos op v1 v2 =
 		| TopDef.VMat(d1, d2, vm1), TopDef.VMat(d1', d2', vm2) when d1 = d1' && d2 = d2' ->
 			TopDef.make_value pos (TopDef.VMat(d1, d2, Misc.ArrayMat.sub vm1 vm2))
 		| kind1, kind2 ->
-			Errors.error_p pos "Subtraction for %s and %s is not defined"
+			Errors.error_p pos "Subtraction for %s and %s is not defined."
 				(TopDef.string_of_value_kind kind1) (TopDef.string_of_value_kind kind2);
 			raise EvalPrim_exception
 		end
@@ -158,7 +192,7 @@ let eval_binop pos op v1 v2 =
 		| TopDef.VMat(d1, d2, vm1), TopDef.VMat(d2', d3, vm2) when d2 = d2' ->
 			TopDef.make_value pos (TopDef.VMat(d1, d3, Misc.ArrayMat.mul_matrix vm1 vm2))
 		| kind1, kind2 ->
-			Errors.error_p pos "Multiplication for %s and %s is not defined"
+			Errors.error_p pos "Multiplication for %s and %s is not defined."
 				(TopDef.string_of_value_kind kind1) (TopDef.string_of_value_kind kind2);
 			raise EvalPrim_exception
 		end
@@ -187,7 +221,7 @@ let eval_binop pos op v1 v2 =
 		| TopDef.VMat(d1, d2, vm), TopDef.VFloat f2 ->
 			TopDef.make_value pos (TopDef.VMat(d1, d2, Misc.ArrayMat.div_scalar vm f2))
 		| kind1, kind2 ->
-			Errors.error_p pos "Division for %s and %s is not defined"
+			Errors.error_p pos "Division for %s and %s is not defined."
 				(TopDef.string_of_value_kind kind1) (TopDef.string_of_value_kind kind2);
 			raise EvalPrim_exception
 		end
@@ -216,7 +250,7 @@ let eval_binop pos op v1 v2 =
 		| TopDef.VMat(d1, d2, vm), TopDef.VFloat f2 ->
 			TopDef.make_value pos (TopDef.VMat(d1, d2, Misc.ArrayMat.mod_scalar vm f2))
 		| kind1, kind2 ->
-			Errors.error_p pos "Modulo for %s and %s is not defined"
+			Errors.error_p pos "Modulo for %s and %s is not defined."
 				(TopDef.string_of_value_kind kind1) (TopDef.string_of_value_kind kind2);
 			raise EvalPrim_exception
 		end
@@ -233,7 +267,7 @@ let eval_binop pos op v1 v2 =
 		| TopDef.VVec(dim1, vv1), TopDef.VVec(dim2, vv2) when dim1 = dim2 ->
 			TopDef.make_value pos (TopDef.VFloat (Misc.ArrayVec.dot vv1 vv2))
 		| kind1, kind2 ->
-			Errors.error_p pos "Dot product of %s and %s is not defined"
+			Errors.error_p pos "Dot product of %s and %s is not defined."
 				(TopDef.string_of_value_kind kind1) (TopDef.string_of_value_kind kind2);
 			raise EvalPrim_exception
 		end
@@ -249,7 +283,7 @@ let eval_binop pos op v1 v2 =
 				;  vv1.(0) *. vv2.(1) -. vv1.(1) *. vv2.(0)
 				|]))
 		| kind1, kind2 ->
-			Errors.error_p pos "Cross product of %s and %s is not defined"
+			Errors.error_p pos "Cross product of %s and %s is not defined."
 				(TopDef.string_of_value_kind kind1) (TopDef.string_of_value_kind kind2);
 			raise EvalPrim_exception
 		end
@@ -275,7 +309,7 @@ let eval_binop pos op v1 v2 =
 			TopDef.make_value pos (TopDef.VMat(d1, d2, Misc.fast_pow Misc.ArrayMat.mul_matrix
 				Misc.ArrayMat.rcp (Misc.ArrayMat.identity (int_of_dim d1)) vm n2))
 		| kind1, kind2 ->
-			Errors.error_p pos "Power for %s and %s is not defined"
+			Errors.error_p pos "Power for %s and %s is not defined."
 				(TopDef.string_of_value_kind kind1) (TopDef.string_of_value_kind kind2);
 			raise EvalPrim_exception
 		end
@@ -292,7 +326,7 @@ let eval_binop pos op v1 v2 =
 		| TopDef.VVec(dim1, vv1), TopDef.VVec(dim2, vv2) when dim1 = dim2 ->
 			TopDef.make_value pos (TopDef.VVec(dim1, Misc.ArrayVec.min_comp vv1 vv2))
 		| kind1, kind2 ->
-			Errors.error_p pos "Minimum for %s and %s is not defined"
+			Errors.error_p pos "Minimum for %s and %s is not defined."
 				(TopDef.string_of_value_kind kind1) (TopDef.string_of_value_kind kind2);
 			raise EvalPrim_exception
 		end
@@ -312,7 +346,7 @@ let eval_unop pos op v =
 		| TopDef.VMat(d1, d2, m) ->
 			TopDef.make_value pos (TopDef.VMat(d1, d2, Misc.ArrayMat.neg m))
 		| kind ->
-			Errors.error_p pos "Unary minus for %s is not defined"
+			Errors.error_p pos "Unary minus for %s is not defined."
 				(TopDef.string_of_value_kind kind);
 			raise EvalPrim_exception
 		end
@@ -327,7 +361,7 @@ let eval_unop pos op v =
 		| TopDef.VMat(d1, d2, m) ->
 			TopDef.make_value pos (TopDef.VMat(d1, d2, m))
 		| kind ->
-			Errors.error_p pos "Unary plus for %s is not defined"
+			Errors.error_p pos "Unary plus for %s is not defined."
 				(TopDef.string_of_value_kind kind);
 			raise EvalPrim_exception
 		end

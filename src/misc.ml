@@ -37,6 +37,7 @@ module ArrayMat = struct
 
 	let add m1 m2 = map2 (+.) m1 m2
 	let div_scalar v s = map (fun x -> x /. s) v
+	let equal m1 m2 = m1 = m2
 	let identity size = Array.init size (fun i -> Array.init size (fun j -> if i = j then 1.0 else 0.0))
 	let mul_matrix m1 m2 =
 		let size2 = if Array.length m2 > 0 then Array.length m2.(0) else 0 in
@@ -107,6 +108,7 @@ module ArrayVec = struct
 	let div_comp v1 v2 = map2 ( /. ) v1 v2
 	let div_scalar v s = map (fun x -> x /. s) v
 	let dot v1 v2      = Array.fold_left (+.) 0.0 (map2 ( *. ) v1 v2)
+	let equal v1 v2    = v1 = v2
 	let min_comp v1 v2 = map2 min v1 v2
 	let mod_comp v1 v2 = map2 mod_float v1 v2
 	let mod_scalar v s = map (fun x -> mod_float x s) v

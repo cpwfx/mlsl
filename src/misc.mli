@@ -8,6 +8,7 @@ module ArrayMat : sig
 	type t = float array array
 	val add : t -> t -> t
 	val div_scalar : t -> float -> t
+	val equal      : t -> t -> bool
 	val identity   : int -> t
 	val mod_scalar : t -> float -> t
 	val mul_matrix : t -> t -> t
@@ -25,6 +26,7 @@ module ArrayVec : sig
 	val div_comp   : t -> t -> t
 	val div_scalar : t -> float -> t
 	val dot        : t -> t -> float
+	val equal      : t -> t -> bool
 	val min_comp   : t -> t -> t
 	val mod_comp   : t -> t -> t
 	val mod_scalar : t -> float -> t
