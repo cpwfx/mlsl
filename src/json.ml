@@ -5,6 +5,7 @@ and  json_obj = (string * json) Misc.ImpList.t
 
 and json =
 | JsInt    of int
+| JsFloat  of float
 | JsList   of json_list
 | JsObj    of json_obj
 | JsString of string
@@ -17,6 +18,7 @@ let list_add = Misc.ImpList.add
 let rec write_json out indent json =
 	match json with
 	| JsInt  n -> output_string out (string_of_int n)
+	| JsFloat f -> output_string out (string_of_float f)
 	| JsList l ->
 		begin match Misc.ImpList.to_list l with
 		| [] -> output_string out "[ ]";

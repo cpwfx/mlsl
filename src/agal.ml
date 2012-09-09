@@ -921,6 +921,33 @@ let finalize sh =
 
 (* ========================================================================= *)
 
+module ConstArray = struct
+	type t = float array array * bool array
+
+	let create_empty () = (Array.make_matrix 128 4 0.0, Array.make 128 false)
+
+	let add (ca_val, ca_uf) row col value =
+		Array.iteri (fun rs vec ->
+			ca_uf.(row + rs) <- true;
+			Array.iteri (fun cs fl ->
+				ca_val.(row + rs).(col + cs) <- fl
+			) vec
+		) value
+
+	let to_json (ca_val, ca_uf) =
+		let result_list = Json.create_list [] in
+		Array.iteri (fun row vec ->
+			if ca_uf.(row) then
+				Json.list_add result_list (Json.JsObj (Json.create_obj
+					[ "register", Json.JsInt row
+					; "value", Json.JsList (Json.create_list (
+						List.map (fun f -> Json.JsFloat f) (Array.to_list vec)))
+					]))
+			else ()
+		) ca_val;
+		Json.JsList result_list
+end
+
 let create_attr_json attrs =
 	Json.JsList (Json.create_list (List.map (fun attr ->
 		Json.JsObj (Json.create_obj
@@ -932,7 +959,7 @@ let create_attr_json attrs =
 
 let create_const_json const =
 	let named_const = Json.create_list [] in
-	let value_const = Json.create_list [] in
+	let value_const = ConstArray.create_empty () in
 	List.iter (fun c ->
 		match c with
 		| ConstNamed cn ->
@@ -943,11 +970,12 @@ let create_const_json const =
 				; "fieldOffset", Json.JsInt (snd (Misc.Opt.value cn.cn_var.var_reg))
 				]))
 		| ConstValue cv ->
-			Errors.error "Unimplemented Agal.create_const_json ConstValue"
+			let (row, col) = Misc.Opt.value cv.cv_var.var_reg in
+			ConstArray.add value_const row col cv.cv_value
 	) const;
 	Json.JsObj (Json.create_obj 
-		[ "params", Json.JsList named_const
-		; "values", Json.JsList value_const
+		[ "values", ConstArray.to_json value_const
+		; "params", Json.JsList named_const
 		])
 
 let create_sampler_json samplers =

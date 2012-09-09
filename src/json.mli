@@ -5,6 +5,7 @@ type json_obj
 
 type json =
 | JsInt    of int
+| JsFloat  of float
 | JsList   of json_list
 | JsObj    of json_obj
 | JsString of string
