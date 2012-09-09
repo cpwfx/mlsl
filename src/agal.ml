@@ -662,8 +662,10 @@ let build_ins globals ins =
 		| Midlang.TBool | Midlang.TInt | Midlang.TFloat ->
 			Some [create_instr (IMov(make_dest_float dst, make_source src))]
 		| Midlang.TMat(d1, d2) ->
-			Errors.error "Unimplemented: Agal.build_ins IMov mat.";
-			None
+			Some (List.map (fun row -> create_instr (IMov(
+				make_dest_row   row d2 dst,
+				make_source_row row src))
+			) (Misc.Dim.range_of_dim d1))
 		| Midlang.TVec dim ->
 			Some [create_instr (IMov(make_dest dim dst, make_source src))]
 		end
@@ -684,8 +686,10 @@ let build_ins globals ins =
 			make_dest_float dst,
 			make_const_vec dim v))]
 	| Midlang.IConstMat(dst, d1, d2, m) ->
-		Errors.error "Unimplemented: Agal.build_ins IConstMat.";
-		None
+		Some (List.map (fun row -> create_instr (IMov(
+			make_dest_row row d2 dst,
+			make_const_vec d2 m.(row)))
+		) (Misc.Dim.range_of_dim d1))
 	| Midlang.IConvert(rv, r1, conv) ->
 		begin match conv with
 		| Midlang.CBool2Int | Midlang.CBool2Float | Midlang.CInt2Float ->
