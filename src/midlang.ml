@@ -76,6 +76,7 @@ type conversion =
 type binop =
 | BOOrB
 | BOAndB
+| BOAddB (* Boolean alternative when the case of two true values is impossibile *)
 | BOAddI
 | BOAddF
 | BOAddM  of dim * dim
@@ -484,13 +485,19 @@ let ins tp f code =
 	let rreg = create_variable VSTemporary tp in
 	Misc.ImpList.add code (create_instr (f rreg));
 	rreg
-let ins_convert_i2f code reg       = 
+let ins_convert_b2i code reg =
+	ins TInt (fun rr -> IConvert(rr, reg, CBool2Int)) code
+let ins_convert_b2f code reg =
+	ins TFloat (fun rr -> IConvert(rr, reg, CBool2Float)) code
+let ins_convert_i2f code reg = 
 	ins TFloat (fun rr -> IConvert(rr, reg, CInt2Float)) code
 let ins_binop tp op code reg1 reg2 = 
 	ins tp (fun rr -> IBinOp(rr, reg1, reg2, op)) code
 let ins_unop tp op code reg =
 	ins tp (fun rr -> IUnOp(rr, reg, op)) code
 
+let ins_binop_and_b           = ins_binop TBool  BOAndB
+let ins_binop_add_b           = ins_binop TBool  BOAddB
 let ins_binop_add_i           = ins_binop TInt   BOAddI
 let ins_binop_add_f           = ins_binop TFloat BOAddF
 let ins_binop_add_v d         = ins_binop (TVec d) (BOAddV d)
@@ -529,10 +536,18 @@ let ins_binop_min_i           = ins_binop TInt BOMinI
 let ins_binop_min_f           = ins_binop TFloat BOMinF
 let ins_binop_min_v d         = ins_binop (TVec d) (BOMinV d)
 
+let ins_unop_not_b       = ins_unop TBool UONotB
 let ins_unop_neg_i       = ins_unop TInt UONegI
 let ins_unop_neg_f       = ins_unop TFloat UONegF
 let ins_unop_neg_v d     = ins_unop (TVec d) (UONegV d)
 let ins_unop_neg_m d1 d2 = ins_unop (TMat(d1, d2)) (UONegM(d1, d2))
+
+let ins_convert_2f code reg =
+	match reg.var_typ with
+	| TBool -> ins_convert_b2f code reg
+	| TInt  -> ins_convert_i2f code reg
+	| TFloat -> reg
+	| _ -> raise (Misc.Internal_error "Ivalid conversion")
 
 let unfold_add pos code reg1 reg2 =
 	match reg1.var_typ, reg2.var_typ with
@@ -929,8 +944,66 @@ let rec merge_if_branches pos program_type code cond_var result1 result2 =
 	let rv1 = concrete_reg_value_kind pos program_type code result1 in
 	let rv2 = concrete_reg_value_kind pos program_type code result2 in
 	match rv1, rv2 with
-	| _ ->
-		Errors.error_p pos "Unimplemented: merge_if_branches.";
+	| RVReg reg1, RVReg reg2 ->
+		begin match reg1.var_typ, reg2.var_typ with
+		| TBool, TBool ->
+			make_reg_value pos (RVReg (
+				ins_binop_add_b code
+					(ins_binop_and_b code cond_var reg1)
+					(ins_binop_and_b code (ins_unop_not_b code cond_var) reg2)
+				))
+		| TInt, TInt ->
+			make_reg_value pos (RVReg (
+				ins_binop_add_i code
+					(ins_binop_mul_i code (ins_convert_b2i code cond_var) reg1)
+					(ins_binop_mul_i code 
+						(ins_convert_b2i code (ins_unop_not_b code cond_var)) 
+						reg2)
+				))
+		| (TInt | TFloat), (TInt | TFloat) ->
+			make_reg_value pos (RVReg (
+				ins_binop_add_f code
+					(ins_binop_mul_ff code 
+						(ins_convert_b2f code cond_var)
+						(ins_convert_2f code reg1))
+					(ins_binop_mul_ff code
+						(ins_convert_b2f code (ins_unop_not_b code cond_var))
+						(ins_convert_2f code reg2))
+				))
+		| TVec d, TVec d' when d = d' ->
+			make_reg_value pos (RVReg (
+				ins_binop_add_v d code
+					(ins_binop_mul_vf d code reg1 (ins_convert_b2f code cond_var))
+					(ins_binop_mul_vf d code reg2 (ins_convert_b2f code (ins_unop_not_b code cond_var)))
+				))
+		| TMat(d1, d2), TMat(d1', d2') when d1 = d1' && d2 = d2' ->
+			make_reg_value pos (RVReg (
+				ins_binop_add_m d1 d2 code
+					(ins_binop_mul_mf d1 d2 code reg1 (ins_convert_b2f code cond_var))
+					(ins_binop_mul_mf d1 d2 code reg2 (ins_convert_b2f code (ins_unop_not_b code cond_var)))
+				))
+		| tp1, tp2 ->
+			Errors.error_p pos "Values of types %s and %s can not be merged."
+				(string_of_typ tp1) (string_of_typ tp2);
+			raise Unfold_exception
+		end
+	| RVRecord rd1, RVRecord rd2 ->
+		make_reg_value pos (RVRecord (StrMap.merge (fun name v1 v2 ->
+			match v1, v2 with
+			| Some rv1, Some rv2 ->
+				Some(merge_if_branches pos program_type code cond_var rv1 rv2)
+			| _ -> None
+			) rd1 rd2))
+	| RVPair(va1, va2), RVPair(vb1, vb2) ->
+		make_reg_value pos (RVPair
+			( merge_if_branches pos program_type code cond_var va1 vb1
+			, merge_if_branches pos program_type code cond_var va2 vb2
+			))
+	| (RVSampler _ | RVFunc _ | RVIfFunc _), (RVSampler _ | RVFunc _ | RVIfFunc _) ->
+		make_reg_value pos (RVIfFunc(cond_var, result1, result2))
+	| kind1, kind2 ->
+		Errors.error_p pos "Can not merge %s and %s."
+			(string_of_rvkind kind1) (string_of_rvkind kind2);
 		raise Unfold_exception
 
 let rec unfold_if_statement pos program_type code gamma cnd e1 e2 =

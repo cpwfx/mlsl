@@ -68,6 +68,7 @@ type conversion =
 type binop =
 | BOOrB
 | BOAndB
+| BOAddB (* Boolean alternative when the case of two true values is impossibile *)
 | BOAddI
 | BOAddF
 | BOAddM  of Misc.Dim.dim * Misc.Dim.dim

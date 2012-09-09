@@ -445,7 +445,7 @@ let build_binop rv r1 r2 op =
 		[ create_instr (IAdd(make_dest_float_reg tmp, make_source r1, make_source r2))
 		; create_instr (ISat(make_dest_float rv, make_source_reg tmp))
 		]
-	| Midlang.BOAddI | Midlang.BOAddF ->
+	| Midlang.BOAddB | Midlang.BOAddI | Midlang.BOAddF ->
 		Some [create_instr (IAdd(make_dest_float rv, make_source r1, make_source r2))]
 	| Midlang.BOAddM(dim1, dim) ->
 		Some (List.map (fun row -> create_instr (IAdd(
