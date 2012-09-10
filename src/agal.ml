@@ -125,6 +125,10 @@ type shader =
 	; sh_fragment : instr list
 	}
 
+type program_type =
+| PVertex
+| PFragment
+
 (* ========================================================================= *)
 
 let varsort_to_int sort =
@@ -953,26 +957,31 @@ let create_attr_json attrs =
 		; "fieldOffset", Json.JsInt (snd (Misc.Opt.value attr.attr_var.var_reg))
 		])) attrs))
 
-let create_const_json const =
-	let named_const = Json.create_list [] in
-	let value_const = ConstArray.create_empty () in
+let create_const_params_json const =
+	let param_list = Json.create_list [] in
 	List.iter (fun c ->
 		match c with
 		| ConstNamed cn ->
-			Json.list_add named_const (Json.JsObj (Json.create_obj
+			Json.list_add param_list (Json.JsObj (Json.create_obj
 				[ "name",        Json.JsString cn.cn_name
 				; "type",        Json.JsString (Midlang.string_of_typ cn.cn_typ)
 				; "register",    Json.JsInt (fst (Misc.Opt.value cn.cn_var.var_reg))
 				; "fieldOffset", Json.JsInt (snd (Misc.Opt.value cn.cn_var.var_reg))
 				]))
+		| ConstValue cv -> ()
+	) const;
+	Json.JsList param_list
+
+let create_const_values_json const =
+	let value_list = ConstArray.create_empty () in
+	List.iter (fun c ->
+		match c with
+		| ConstNamed cn -> ()
 		| ConstValue cv ->
 			let (row, col) = Misc.Opt.value cv.cv_var.var_reg in
-			ConstArray.add value_const row col cv.cv_value
+			ConstArray.add value_list row col cv.cv_value
 	) const;
-	Json.JsObj (Json.create_obj 
-		[ "values", ConstArray.to_json value_const
-		; "params", Json.JsList named_const
-		])
+	ConstArray.to_json value_list
 
 let create_sampler_json samplers =
 	let sam_list = Json.create_list [] in
@@ -997,15 +1006,15 @@ let create_mask_bin mask offset =
 		(if mask.dmask_w then 8 else 0)
 	) lsl offset
 
-let write_dest out dst =
+let dest_bytecode bytecode dst =
 	(* Register number *)
-	LittleEndian.write_short out 
+	Misc.ByteArray.append_short bytecode
 		(dst.dst_row + (fst (Misc.Opt.value dst.dst_var.var_reg)));
 	(* Write mask *)
-	LittleEndian.write_byte out 
+	Misc.ByteArray.append_byte bytecode
 		(create_mask_bin dst.dst_mask (snd (Misc.Opt.value dst.dst_var.var_reg)));
 	(* Register type *)
-	LittleEndian.write_byte out (varsort_to_int dst.dst_var.var_sort)
+	Misc.ByteArray.append_byte bytecode (varsort_to_int dst.dst_var.var_sort)
 
 let create_swizzle_bin swizzle fld_offset dest_offset =
 	let comp0 =
@@ -1025,42 +1034,42 @@ let create_swizzle_bin swizzle fld_offset dest_offset =
 	((comp2 land 3) lsl 4) lor
 	((comp3 land 3) lsl 6)
 
-let write_source out src dest_offset =
+let source_bytecode bytecode src dest_offset =
 	(* Register number *)
-	LittleEndian.write_short out
+	Misc.ByteArray.append_short bytecode
 		(src.src_row + (fst (Misc.Opt.value src.src_var.var_reg)));
 	(* Indirect offset *)
 	begin match src.src_offset with
 	| None -> (* direct *)
-		LittleEndian.write_byte out 0
+		Misc.ByteArray.append_byte bytecode 0
 	| Some off -> (* indirect *)
-		LittleEndian.write_byte out
+		Misc.ByteArray.append_byte bytecode 
 			(off.srcoff_row + (fst (Misc.Opt.value off.srcoff_var.var_reg)))
 	end;
 	(* Swizzle *)
-	LittleEndian.write_byte out 
+	Misc.ByteArray.append_byte bytecode
 		(create_swizzle_bin 
 			src.src_swizzle 
 			(snd (Misc.Opt.value src.src_var.var_reg)) 
 			dest_offset);
 	(* Register type *)
-	LittleEndian.write_byte out (varsort_to_int src.src_var.var_sort);
+	Misc.ByteArray.append_byte bytecode (varsort_to_int src.src_var.var_sort);
 	(* Indirect offset *)
 	begin match src.src_offset with
 	| None -> (* direct *)
-		LittleEndian.write_byte  out 0;
-		LittleEndian.write_short out 0x0080
+		Misc.ByteArray.append_byte  bytecode 0;
+		Misc.ByteArray.append_short bytecode 0x0000
 	| Some off ->
 		(* Index register type *)
-		LittleEndian.write_byte out (varsort_to_int off.srcoff_var.var_sort);
+		Misc.ByteArray.append_byte bytecode (varsort_to_int off.srcoff_var.var_sort);
 		(* Index register component select *)
-		LittleEndian.write_byte out 
+		Misc.ByteArray.append_byte bytecode
 			(off.srcoff_component + snd (Misc.Opt.value off.srcoff_var.var_reg));
 		(* Indirect flag *)
-		LittleEndian.write_byte out 0x80
+		Misc.ByteArray.append_byte bytecode 0x80
 	end
 
-let write_crs2_source out src dst_field =
+let crs2_source_bytecode bytecode src dst_field =
 	let real_src =
 		{ src with src_swizzle =
 			match dst_field with
@@ -1079,7 +1088,7 @@ let write_crs2_source out src dst_field =
 			| 2 -> src.src_swizzle
 			| _ -> raise (Misc.Internal_error "Invalid cross product output field")
 		} in
-	write_source out real_src 0
+	source_bytecode bytecode real_src 0
 
 let sampler_filter_bin filter =
 	match filter with
@@ -1102,136 +1111,143 @@ let sampler_dim_bin dim =
 	| Midlang.SDim2D   -> 0
 	| Midlang.SDimCube -> 1
 
-let write_sampler out sam =
+let sampler_bytecode bytecode sam =
 	(* Sampler index *)
-	LittleEndian.write_short out (Misc.Opt.value sam.sam_index);
+	Misc.ByteArray.append_short bytecode (Misc.Opt.value sam.sam_index);
 	(* Unused *)
-	LittleEndian.write_short out 0;
+	Misc.ByteArray.append_short bytecode 0;
 	(* Register type (Sampler) *)
-	LittleEndian.write_byte out 5;
+	Misc.ByteArray.append_byte bytecode 5;
 	(* 4bits unused and 4bit dimension *)
-	LittleEndian.write_byte out ((sampler_dim_bin sam.sam_dim) lsl 4);
+	Misc.ByteArray.append_byte bytecode ((sampler_dim_bin sam.sam_dim) lsl 4);
 	(* 4bits special flag (0) and 4bit wrapping *)
-	LittleEndian.write_byte out ((sampler_wrapping_bin sam.sam_wrapping) lsl 4);
+	Misc.ByteArray.append_byte bytecode ((sampler_wrapping_bin sam.sam_wrapping) lsl 4);
 	(* 4bit mipmap and 4bit filter *)
-	LittleEndian.write_byte out (
+	Misc.ByteArray.append_byte bytecode (
 		(sampler_mipmap_bin sam.sam_mipmap) lor
 		((sampler_filter_bin sam.sam_filter) lsl 4))
 
-let rec write_bytecode out code =
-	match code with
-	| [] -> ()
-	| ins :: code ->
-		begin match ins.ins_kind with
-		| IMov(dst, src) ->
-			LittleEndian.write_int out 0x00;
-			write_dest out dst;
-			write_source out src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-			LittleEndian.write_int64 out Int64.zero (* dummy source *)
-		| IAdd(dst, src1, src2) ->
-			LittleEndian.write_int out 0x01;
-			write_dest out dst;
-			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-		| ISub(dst, src1, src2) ->
-			LittleEndian.write_int out 0x02;
-			write_dest out dst;
-			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-		| IMul(dst, src1, src2) ->
-			LittleEndian.write_int out 0x03;
-			write_dest out dst;
-			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-		| IDiv(dst, src1, src2) ->
-			LittleEndian.write_int out 0x04;
-			write_dest out dst;
-			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-		| IMin(dst, src1, src2) ->
-			LittleEndian.write_int out 0x06;
-			write_dest out dst;
-			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-		| IMax(dst, src1, src2) ->
-			LittleEndian.write_int out 0x07;
-			write_dest out dst;
-			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-		| IFrc(dst, src) ->
-			LittleEndian.write_int out 0x08;
-			write_dest out dst;
-			write_source out src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-			LittleEndian.write_int64 out Int64.zero (* dummy source *)
-		| IPow(dst, src1, src2) ->
-			LittleEndian.write_int out 0x0B;
-			write_dest out dst;
-			write_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-			write_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-		| ICrs(dst, src1, src2) ->
-			LittleEndian.write_int out 0x11;
-			write_dest out dst;
-			write_source out src1 0;
-			write_source out src2 0
-		| IDp3(dst, src1, src2) ->
-			LittleEndian.write_int out 0x12;
-			write_dest out dst;
-			write_source out src1 0;
-			write_source out src2 0
-		| IDp4(dst, src1, src2) ->
-			LittleEndian.write_int out 0x13;
-			write_dest out dst;
-			write_source out src1 0;
-			write_source out src2 0
-		| INeg(dst, src) ->
-			LittleEndian.write_int out 0x15;
-			write_dest out dst;
-			write_source out src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-			LittleEndian.write_int64 out Int64.zero (* dummy source *)
-		| ISat(dst, src) ->
-			LittleEndian.write_int out 0x16;
-			write_dest out dst;
-			write_source out src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-			LittleEndian.write_int64 out Int64.zero (* dummy source *)
-		| IM33(dst, src1, src2) ->
-			LittleEndian.write_int out 0x17;
-			write_dest out dst;
-			write_source out src1 0;
-			write_source out src2 0
-		| IM44(dst, src1, src2) ->
-			LittleEndian.write_int out 0x18;
-			write_dest out dst;
-			write_source out src1 0;
-			write_source out src2 0
-		| IM34(dst, src1, src2) ->
-			LittleEndian.write_int out 0x19;
-			write_dest out dst;
-			write_source out src1 0;
-			write_source out src2 0
-		| ITex(dst, src, sam) ->
-			LittleEndian.write_int out 0x28;
-			write_dest out dst;
-			write_source out src 0;
-			write_sampler out sam
-		| ICrs2(dst, src1, src2) ->
-			LittleEndian.write_int out 0x11;
-			write_dest out dst;
-			write_crs2_source out src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
-			write_crs2_source out src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)))
-		end;
-		write_bytecode out code
+let instr_bytecode bytecode ins =
+	match ins.ins_kind with
+	| IMov(dst, src) ->
+		Misc.ByteArray.append_int bytecode 0x00;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		Misc.ByteArray.append_int64 bytecode Int64.zero (* dummy source *)
+	| IAdd(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x01;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		source_bytecode bytecode src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+	| ISub(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x02;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		source_bytecode bytecode src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+	| IMul(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x03;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		source_bytecode bytecode src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+	| IDiv(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x04;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		source_bytecode bytecode src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+	| IMin(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x06;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		source_bytecode bytecode src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+	| IMax(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x07;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		source_bytecode bytecode src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+	| IFrc(dst, src) ->
+		Misc.ByteArray.append_int bytecode 0x08;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		Misc.ByteArray.append_int64 bytecode Int64.zero (* dummy source *)
+	| IPow(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x0B;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		source_bytecode bytecode src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+	| ICrs(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x11;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src1 0;
+		source_bytecode bytecode src2 0
+	| IDp3(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x12;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src1 0;
+		source_bytecode bytecode src2 0
+	| IDp4(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x13;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src1 0;
+		source_bytecode bytecode src2 0
+	| INeg(dst, src) ->
+		Misc.ByteArray.append_int bytecode 0x15;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		Misc.ByteArray.append_int64 bytecode Int64.zero (* dummy source *)
+	| ISat(dst, src) ->
+		Misc.ByteArray.append_int bytecode 0x16;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		Misc.ByteArray.append_int64 bytecode Int64.zero (* dummy source *)
+	| IM33(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x17;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src1 0;
+		source_bytecode bytecode src2 0
+	| IM44(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x18;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src1 0;
+		source_bytecode bytecode src2 0
+	| IM34(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x19;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src1 0;
+		source_bytecode bytecode src2 0
+	| ITex(dst, src, sam) ->
+		Misc.ByteArray.append_int bytecode 0x19;
+		dest_bytecode bytecode dst;
+		source_bytecode bytecode src 0;
+		sampler_bytecode bytecode sam
+	| ICrs2(dst, src1, src2) ->
+		Misc.ByteArray.append_int bytecode 0x11;
+		dest_bytecode bytecode dst;
+		crs2_source_bytecode bytecode src1 (snd (Misc.Opt.value (dst.dst_var.var_reg)));
+		crs2_source_bytecode bytecode src2 (snd (Misc.Opt.value (dst.dst_var.var_reg)))
 
-let register_name vertex sort row =
+let register_name program_type sort row =
 	match sort with
 	| VSAttribute -> "va" ^ string_of_int row
-	| VSConstant  -> (if vertex then "vc" else "fc") ^ string_of_int row
-	| VSTemporary -> (if vertex then "vt" else "ft") ^ string_of_int row
-	| VSOutput    -> (if vertex then "op" else "oc")
+	| VSConstant  ->
+		begin match program_type with
+		| PVertex -> "vc"
+		| PFragment -> "fc"
+		end ^ string_of_int row
+	| VSTemporary ->
+		begin match program_type with
+		| PVertex -> "vt"
+		| PFragment -> "ft"
+		end ^ string_of_int row
+	| VSOutput    -> 
+		begin match program_type with
+		| PVertex -> "op"
+		| PFragment -> "oc"
+		end
 	| VSVarying   -> "v" ^ string_of_int row
 
-let write_dest_asm vertex dst =
+let dest_asm program_type dst =
 	let reg_name =
-		register_name vertex dst.dst_var.var_sort
+		register_name program_type dst.dst_var.var_sort
 			(dst.dst_row + (fst (Misc.Opt.value dst.dst_var.var_reg))) in
 	let mask =
 		create_mask_bin dst.dst_mask (snd (Misc.Opt.value dst.dst_var.var_reg)) in
@@ -1268,9 +1284,9 @@ let create_swizzle_asm swizzle fld_offset dest_offset =
 	"." ^ (comp_to_str comp0) ^ (comp_to_str comp1) ^
 	      (comp_to_str comp2) ^ (comp_to_str comp3)
 
-let write_source_asm vertex src dest_offset =
+let source_asm program_type src dest_offset =
 	let reg_name =
-		register_name vertex src.src_var.var_sort
+		register_name program_type src.src_var.var_sort
 			(src.src_row + (fst (Misc.Opt.value src.src_var.var_reg))) in
 	let offset =
 		begin match src.src_offset with
@@ -1286,7 +1302,7 @@ let write_source_asm vertex src dest_offset =
 			dest_offset in
 	reg_name ^ offset ^ (if swizzle = ".xyzw" then "" else swizzle)
 
-let write_crs2_source_asm vertex src dst_field =
+let crs2_source_asm program_type src dst_field =
 	let real_src =
 		{ src with src_swizzle =
 			match dst_field with
@@ -1305,9 +1321,9 @@ let write_crs2_source_asm vertex src dst_field =
 			| 2 -> src.src_swizzle
 			| _ -> raise (Misc.Internal_error "Invalid cross product output field")
 		} in
-	write_source_asm vertex real_src 0
+	source_asm program_type real_src 0
 
-let write_sampler_asm sampler =
+let sampler_asm sampler =
 	let write_sampler_dim dim =
 		match dim with
 		| Midlang.SDim2D   -> "2d"
@@ -1336,117 +1352,140 @@ let write_sampler_asm sampler =
 		(write_sampler_mipmap   sampler.sam_mipmap)
 		(write_sampler_wrapping sampler.sam_wrapping)
 
-let rec write_asm vertex out code =
-	match code with
-	| [] -> ()
-	| ins :: code ->
-		begin match ins.ins_kind with
-		| IMov(dst, src) -> Printf.fprintf out "mov %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-		| IAdd(dst, src1, src2) -> Printf.fprintf out "add %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-		| ISub(dst, src1, src2) -> Printf.fprintf out "sub %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-		| IMul(dst, src1, src2) -> Printf.fprintf out "mul %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-		| IDiv(dst, src1, src2) -> Printf.fprintf out "div %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-		| IMin(dst, src1, src2) -> Printf.fprintf out "min %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-		| IMax(dst, src1, src2) -> Printf.fprintf out "max %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-		| IFrc(dst, src) -> Printf.fprintf out "frc %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-		| IPow(dst, src1, src2) -> Printf.fprintf out "pow %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-			(write_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-		| ICrs(dst, src1, src2) -> Printf.fprintf out "crs %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src1 0)
-			(write_source_asm vertex src2 0)
-		| IDp3(dst, src1, src2) -> Printf.fprintf out "dp3 %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src1 0)
-			(write_source_asm vertex src2 0)
-		| IDp4(dst, src1, src2) -> Printf.fprintf out "dp4 %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src1 0)
-			(write_source_asm vertex src2 0)
-		| INeg(dst, src) -> Printf.fprintf out "neg %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-		| ISat(dst, src) -> Printf.fprintf out "sat %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-		| IM33(dst, src1, src2) -> Printf.fprintf out "m33 %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src1 0)
-			(write_source_asm vertex src2 0)
-		| IM44(dst, src1, src2) -> Printf.fprintf out "m44 %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src1 0)
-			(write_source_asm vertex src2 0)
-		| IM34(dst, src1, src2) -> Printf.fprintf out "m34 %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src1 0)
-			(write_source_asm vertex src2 0)
-		| ITex(dst, src, sam) -> Printf.fprintf out "tex %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_source_asm vertex src 0)
-			(write_sampler_asm sam)
-		| ICrs2(dst, src1, src2) -> Printf.fprintf out "crs %s, %s, %s\n"
-			(write_dest_asm vertex dst)
-			(write_crs2_source_asm vertex src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-			(write_crs2_source_asm vertex src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
-		end;
-		write_asm vertex out code
+let instr_asm program_type buffer ins =
+	match ins.ins_kind with
+	| IMov(dst, src) -> Printf.bprintf buffer "mov %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+	| IAdd(dst, src1, src2) -> Printf.bprintf buffer "add %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		(source_asm program_type src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+	| ISub(dst, src1, src2) -> Printf.bprintf buffer "sub %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		(source_asm program_type src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+	| IMul(dst, src1, src2) -> Printf.bprintf buffer "mul %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		(source_asm program_type src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+	| IDiv(dst, src1, src2) -> Printf.bprintf buffer "div %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		(source_asm program_type src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+	| IMin(dst, src1, src2) -> Printf.bprintf buffer "min %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		(source_asm program_type src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+	| IMax(dst, src1, src2) -> Printf.bprintf buffer "max %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		(source_asm program_type src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+	| IFrc(dst, src) -> Printf.bprintf buffer "frc %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+	| IPow(dst, src1, src2) -> Printf.bprintf buffer "pow %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		(source_asm program_type src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+	| ICrs(dst, src1, src2) -> Printf.bprintf buffer "crs %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src1 0)
+		(source_asm program_type src2 0)
+	| IDp3(dst, src1, src2) -> Printf.bprintf buffer "dp3 %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src1 0)
+		(source_asm program_type src2 0)
+	| IDp4(dst, src1, src2) -> Printf.bprintf buffer "dp4 %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src1 0)
+		(source_asm program_type src2 0)
+	| INeg(dst, src) -> Printf.bprintf buffer "neg %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+	| ISat(dst, src) -> Printf.bprintf buffer "sat %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+	| IM33(dst, src1, src2) -> Printf.bprintf buffer "m33 %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src1 0)
+		(source_asm program_type src2 0)
+	| IM44(dst, src1, src2) -> Printf.bprintf buffer "m44 %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src1 0)
+		(source_asm program_type src2 0)
+	| IM34(dst, src1, src2) -> Printf.bprintf buffer "m34 %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src1 0)
+		(source_asm program_type src2 0)
+	| ITex(dst, src, sam) -> Printf.bprintf buffer "tex %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(source_asm program_type src 0)
+		(sampler_asm sam)
+	| ICrs2(dst, src1, src2) -> Printf.bprintf buffer "crs %s, %s, %s\n"
+		(dest_asm program_type dst)
+		(crs2_source_asm program_type src1 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
+		(crs2_source_asm program_type src2 (snd (Misc.Opt.value (dst.dst_var.var_reg))))
 
-let write_program vertex path code =
-	Misc.IO.with_out_channel path true (fun out ->
-		LittleEndian.write_byte out 0xA0;                      (* magic        *)
-		LittleEndian.write_int  out 0x01;                      (* version      *)
-		LittleEndian.write_byte out 0xA1;                      (* shadertypeid *)
-		LittleEndian.write_byte out (if vertex then 0 else 1); (* shadertype   *)
-		write_bytecode out code
-	)
+let program_bytecode program_type code =
+	let bytecode = Misc.ByteArray.create Misc.ByteArray.LittleEndian in
+	Misc.ByteArray.append_byte bytecode 0xA0; (* magic        *)
+	Misc.ByteArray.append_int  bytecode 0x01; (* version      *)
+	Misc.ByteArray.append_byte bytecode 0xA1; (* shadertypeid *)
+	Misc.ByteArray.append_byte bytecode (
+		match program_type with
+		| PVertex -> 0
+		| PFragment -> 1);                    (* shadertype   *)
+	List.iter (instr_bytecode bytecode) code;
+	bytecode
 
-let write_program_asm vertex path code =
-	Misc.IO.with_out_channel path false (fun out ->
-		write_asm vertex out code
-	)
+let program_asm program_type code =
+	let buffer = Buffer.create 32 in
+	List.iter (instr_asm program_type buffer) code;
+	Buffer.contents buffer
 
-let write_json sh =
-	Json.write (sh.sh_name ^ ".json") (Json.create_obj
-		[ "attr",   create_attr_json sh.sh_glob.shg_attr
-		; "vconst", create_const_json sh.sh_glob.shg_v_const
-		; "fconst", create_const_json sh.sh_glob.shg_f_const
+type source_type =
+| STBytecode
+| STAssembler
+
+let write_agal src_tp sh () =
+	Json.write (sh.sh_name ^ "_vp.json") (Json.create_obj
+		[ "source", Json.JsObj (Json.create_obj
+			[ "type",  Json.JsString (
+				match src_tp with
+				| STBytecode  -> "bytecode"
+				| STAssembler -> "assembler")
+			; "value", Json.JsString (
+				match src_tp with
+				| STBytecode ->
+					Misc.Base64.of_byte_array (program_bytecode PVertex sh.sh_vertex)
+				| STAssembler ->
+					program_asm PVertex sh.sh_vertex)
+			])
+		; "attr", create_attr_json sh.sh_glob.shg_attr
+		; "constParams", create_const_params_json sh.sh_glob.shg_v_const
+		; "constValues", create_const_values_json sh.sh_glob.shg_v_const
+		]);
+	Json.write (sh.sh_name ^ "_fp.json") (Json.create_obj
+		[ "source", Json.JsObj (Json.create_obj
+			[ "type",  Json.JsString (
+				match src_tp with
+				| STBytecode  -> "bytecode"
+				| STAssembler -> "assembler")
+			; "value", Json.JsString (
+				match src_tp with
+				| STBytecode ->
+					Misc.Base64.of_byte_array (program_bytecode PFragment sh.sh_fragment)
+				| STAssembler ->
+					program_asm PFragment sh.sh_fragment)
+			])
 		; "sampler", create_sampler_json sh.sh_glob.shg_samplers
+		; "constParams", create_const_params_json sh.sh_glob.shg_f_const
+		; "constValues", create_const_values_json sh.sh_glob.shg_f_const
 		])
 
-let write sh () =
-	write_json sh;
-	write_program true  (sh.sh_name ^ ".vs") sh.sh_vertex;
-	write_program false (sh.sh_name ^ ".fs") sh.sh_fragment
-
-let write_asm sh () =
-	write_json sh;
-	write_program_asm true  (sh.sh_name ^ "_vs.agal") sh.sh_vertex;
-	write_program_asm false (sh.sh_name ^ "_fs.agal") sh.sh_fragment
+let write     = write_agal STBytecode
+let write_asm = write_agal STAssembler
 
 let do_all shader =
 	Misc.Opt.iter (build shader) (fun aprog ->

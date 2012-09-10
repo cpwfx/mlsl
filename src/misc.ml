@@ -124,6 +124,98 @@ module ArrayVec = struct
 	let sub v1 v2 = map2 (-.) v1 v2
 end
 
+module ImpList = struct
+	type 'a t = ('a list) ref
+	let add l x = l := x :: !l
+	let create () = ref []
+	let is_empty l =
+		match !l with
+		| [] -> true
+		| _ :: _ -> false
+	let iter f l  = List.iter f (List.rev !l)
+	let of_list l = ref (List.rev l)
+	let to_list l = List.rev !l
+end
+
+module ByteArray = struct
+	type mode =
+	| LittleEndian
+
+	type t = (int ImpList.t * mode)
+
+	let append_byte (arr, _) value =
+		ImpList.add arr (value land 0xFF)
+	let append_short ba value =
+		match snd ba with
+		| LittleEndian ->
+			append_byte ba (value land 0xFF);
+			append_byte ba ((value lsr 8) land 0xFF)
+	let append_int ba value =
+		match snd ba with
+		| LittleEndian ->
+			append_byte ba (value land 0xFF);
+			append_byte ba ((value lsr 8)  land 0xFF);
+			append_byte ba ((value lsr 16) land 0xFF);
+			append_byte ba ((value lsr 24) land 0xFF)
+	let append_int64 ba value =
+		match snd ba with
+		| LittleEndian ->
+			append_byte ba (Int64.to_int value);
+			append_byte ba (Int64.to_int (Int64.shift_right value 8));
+			append_byte ba (Int64.to_int (Int64.shift_right value 16));
+			append_byte ba (Int64.to_int (Int64.shift_right value 24));
+			append_byte ba (Int64.to_int (Int64.shift_right value 32));
+			append_byte ba (Int64.to_int (Int64.shift_right value 40));
+			append_byte ba (Int64.to_int (Int64.shift_right value 48));
+			append_byte ba (Int64.to_int (Int64.shift_right value 56))
+
+	let create mode = (ImpList.create (), mode)
+
+	let to_int_list (arr, _) = ImpList.to_list arr
+end
+
+module Base64 = struct
+	type t = string
+	let char_map =
+		[| 'A'; 'B'; 'C'; 'D'; 'E'; 'F'; 'G'; 'H'
+		;  'I'; 'J'; 'K'; 'L'; 'M'; 'N'; 'O'; 'P'
+		;  'Q'; 'R'; 'S'; 'T'; 'U'; 'V'; 'W'; 'X'
+		;  'Y'; 'Z'; 'a'; 'b'; 'c'; 'd'; 'e'; 'f'
+		;  'g'; 'h'; 'i'; 'j'; 'k'; 'l'; 'm'; 'n'
+		;  'o'; 'p'; 'q'; 'r'; 's'; 't'; 'u'; 'v'
+		;  'w'; 'x'; 'y'; 'z'; '0'; '1'; '2'; '3'
+		;  '4'; '5'; '6'; '7'; '8'; '9'; '+'; '/'
+		|]
+	let rec encode_int_list line_length buffer il =
+		match il with
+		| []     -> ()
+		| b0 :: [] ->
+			(if line_length = 64 then Buffer.add_string buffer "\r\n");
+			Buffer.add_char buffer char_map.(b0 lsr 2);
+			Buffer.add_char buffer char_map.((b0 land 0x03) lsl 4);
+			Buffer.add_char buffer '=';
+			Buffer.add_char buffer '='
+		| b0 :: b1 :: [] ->
+			(if line_length = 64 then Buffer.add_string buffer "\r\n");
+			Buffer.add_char buffer char_map.(b0 lsr 2);
+			Buffer.add_char buffer char_map.(((b0 land 0x03) lsl 4) lor (b1 lsr 4));
+			Buffer.add_char buffer char_map.((b1 land 0x0F) lsl 2);
+			Buffer.add_char buffer '='
+		| b0 :: b1 :: b2 :: il ->
+			(if line_length = 64 then Buffer.add_string buffer "\r\n");
+			Buffer.add_char buffer char_map.(b0 lsr 2);
+			Buffer.add_char buffer char_map.(((b0 land 0x03) lsl 4) lor (b1 lsr 4));
+			Buffer.add_char buffer char_map.(((b1 land 0x0F) lsl 2) lor (b2 lsr 6));
+			Buffer.add_char buffer char_map.(b2 land 0x3F);
+			encode_int_list (if line_length = 64 then 4 else line_length + 4) buffer il
+
+	let of_byte_array ba =
+		let values = ByteArray.to_int_list ba in
+		let buffer = Buffer.create 32 in
+		encode_int_list 0 buffer values;
+		Buffer.contents buffer
+end
+
 module Char = struct
 	let is_upper c = c >= 'A' && c <= 'Z'
 end
@@ -157,19 +249,6 @@ end
 module Int = struct
 	type t = int
 	let compare (x : t) (y : t) = compare x y
-end
-
-module ImpList = struct
-	type 'a t = ('a list) ref
-	let add l x = l := x :: !l
-	let create () = ref []
-	let is_empty l =
-		match !l with
-		| [] -> true
-		| _ :: _ -> false
-	let iter f l  = List.iter f (List.rev !l)
-	let of_list l = ref (List.rev l)
-	let to_list l = List.rev !l
 end
 
 module IO = struct

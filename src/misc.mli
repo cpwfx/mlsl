@@ -42,6 +42,24 @@ module ArrayVec : sig
 	val sub        : t -> t -> t
 end
 
+module ByteArray : sig
+	type t
+	type mode =
+	| LittleEndian
+
+	val append_byte  : t -> int -> unit
+	val append_short : t -> int -> unit
+	val append_int   : t -> int -> unit
+	val append_int64 : t -> int64 -> unit
+	val create : mode -> t
+	val to_int_list : t -> int list
+end
+
+module Base64 : sig
+	type t = string
+	val of_byte_array : ByteArray.t -> t
+end
+
 module Char : sig
 	val is_upper : char -> bool
 end
