@@ -73,7 +73,7 @@ let _ =
 
 let nat_regexp = Str.regexp "^[0-9]+$"
 
-let float_regexp = Str.regexp "^[0-9]+.[0-9]*([eE][+-]?[0-9]+)?$"
+let float_regexp = Str.regexp "^[0-9]+.[0-9]*\\([eE][+-]?[0-9]+\\)?$" 
 
 let tokenize_number str =
 	if Str.string_match nat_regexp str 0 then
