@@ -8,7 +8,7 @@ const col         : vec4
 const projMatrix  : mat44
 
 // Attr declarations
-attr POSITION pos : vec4
+attr pos : vec4
 
 // vertex shader
 let vertex vs =

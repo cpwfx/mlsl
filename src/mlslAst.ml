@@ -186,15 +186,9 @@ and match_pattern =
 	; mp_action    : expr
 	}
 
-type attr_semantics =
-	{ asem_name : string
-	; asem_pos  : Errors.position
-	}
-
 type topdef_kind =
 | TDAttrDecl
 	of string         (* name      *)
-	*  attr_semantics (* semantics *)
 	*  typ_term       (* type      *)
 | TDConstDecl 
 	of string         (* name *)

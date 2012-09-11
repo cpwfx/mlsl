@@ -521,8 +521,8 @@ let rec bind_top_pattern pat value =
 	
 let eval_topdef td =
 	match td.MlslAst.td_kind with
-	| MlslAst.TDAttrDecl(name, semantics, typ) ->
-		TopDef.add_attr td.MlslAst.td_pos name semantics typ
+	| MlslAst.TDAttrDecl(name, typ) ->
+		TopDef.add_attr td.MlslAst.td_pos name typ
 	| MlslAst.TDConstDecl(name, typ) ->
 		TopDef.add_const td.MlslAst.td_pos name typ
 	| MlslAst.TDSamplerDecl(name, typ) ->

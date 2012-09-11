@@ -5,8 +5,8 @@ const col         : vec4
 const projMatrix  : mat44
 
 // Attr declarations
-attr POSITION pos : vec4
-attr TEXCOORD0 coord : vec2
+attr pos : vec4
+attr coord : vec2
 
 // Samplers declarations
 sampler tex : sampler2D

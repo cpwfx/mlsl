@@ -34,27 +34,6 @@ type sampler =
 	; sampler_dim  : sampler_dim
 	}
 
-type semantics =
-| SInput0
-| SInput1
-| SInput2
-| SInput3
-| SInput4
-| SInput5
-| SInput6
-| SInput7
-| SPosition
-| STexcoord0
-| STexcoord1
-| STexcoord2
-| STexcoord3
-
-type attr =
-	{ attr_semantics : semantics
-	; attr_name      : string
-	; attr_var       : variable
-	}
-
 type param =
 	{ param_name : string
 	; param_var  : variable
@@ -136,7 +115,7 @@ val create_instr : instr_kind -> instr
 
 type shader =
 	{ sh_name     : string
-	; sh_attr     : attr list
+	; sh_attr     : param list
 	; sh_v_const  : param list
 	; sh_f_const  : param list
 	; sh_varying  : param list

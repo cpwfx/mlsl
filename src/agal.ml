@@ -216,29 +216,10 @@ let make_temp_reg rows cols =
 	; var_sort       = VSTemporary
 	}
 
-let map_attr_variable attr =
-	let var = map_variable attr.Midlang.attr_var in
-	begin match attr.Midlang.attr_semantics with
-	| Midlang.SInput0    -> var.var_reg <- Some (0, 0)
-	| Midlang.SInput1    -> var.var_reg <- Some (1, 0)
-	| Midlang.SInput2    -> var.var_reg <- Some (2, 0)
-	| Midlang.SInput3    -> var.var_reg <- Some (3, 0)
-	| Midlang.SInput4    -> var.var_reg <- Some (4, 0)
-	| Midlang.SInput5    -> var.var_reg <- Some (5, 0)
-	| Midlang.SInput6    -> var.var_reg <- Some (6, 0)
-	| Midlang.SInput7    -> var.var_reg <- Some (7, 0)
-	| Midlang.SPosition  -> var.var_reg <- Some (0, 0)
-	| Midlang.STexcoord0 -> var.var_reg <- Some (4, 0)
-	| Midlang.STexcoord1 -> var.var_reg <- Some (5, 0)
-	| Midlang.STexcoord2 -> var.var_reg <- Some (6, 0)
-	| Midlang.STexcoord3 -> var.var_reg <- Some (7, 0)
-	end;
-	var
-
 let map_attr attr =
-	{ attr_name = attr.Midlang.attr_name
-	; attr_typ  = attr.Midlang.attr_var.Midlang.var_typ
-	; attr_var  = map_attr_variable attr
+	{ attr_name = attr.Midlang.param_name
+	; attr_typ  = attr.Midlang.param_var.Midlang.var_typ
+	; attr_var  = map_variable attr.Midlang.param_var
 	}
 
 let map_const const =
@@ -898,12 +879,13 @@ let bind_registers shader cnt code =
 
 let finalize sh =
 	let ok =
+		bind_glob_registers "attributes" 8 
+			(List.map (fun attr -> attr.attr_var) sh.sh_glob.shg_attr) &&
 		bind_glob_registers "vertex shader constants" 128 
 			(List.map variable_of_const sh.sh_glob.shg_v_const) &&
 		bind_glob_registers "fragment shader constants" 28 
 			(List.map variable_of_const sh.sh_glob.shg_f_const) &&
-		bind_glob_registers "varying registers" 
-			8 sh.sh_glob.shg_varying &&
+		bind_glob_registers "varying registers" 8 sh.sh_glob.shg_varying &&
 		bind_sampler_registers sh.sh_glob.shg_samplers &&
 		begin
 			LiveVar.compute sh.sh_vertex;

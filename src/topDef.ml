@@ -7,7 +7,7 @@ type value =
 	; mutable v_kind : value_kind option
 	}
 and value_kind =
-| VAttr     of string  * MlslAst.attr_semantics * MlslAst.typ_term
+| VAttr     of string  * MlslAst.typ_term
 | VConst    of string  * MlslAst.typ_term
 | VSampler  of string  * MlslAst.typ_term
 | VFragment of closure * MlslAst.expr
@@ -26,7 +26,7 @@ and closure = value Map.Make(String).t
 
 let string_of_value_kind kind =
 	match kind with
-	| VAttr(name, _, _) -> "attribute " ^ name
+	| VAttr(name, _) -> "attribute " ^ name
 	| VConst(name, _) -> "constant " ^ name
 	| VSampler(name, _) -> "sampler " ^ name
 	| VFragment _ -> "fragment program"
@@ -69,9 +69,9 @@ let check_name name =
 	with
 	| Not_found -> None
 
-let add_attr pos name semantics typ =
-	Hashtbl.replace topdef_map name (make_value pos (VAttr(name, semantics, typ)));
-	attr_list_r := (name, semantics, typ) :: !attr_list_r
+let add_attr pos name typ =
+	Hashtbl.replace topdef_map name (make_value pos (VAttr(name, typ)));
+	attr_list_r := (name, typ) :: !attr_list_r
 
 let add_const pos name typ =
 	Hashtbl.replace topdef_map name (make_value pos (VConst(name, typ)));

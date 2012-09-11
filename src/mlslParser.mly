@@ -326,13 +326,9 @@ pattern_atom_list_rev:
 ;
 
 topdef:
-	  KW_ATTR CONSTR ID COLON typ_term {
-			let asem =
-				{ MlslAst.asem_name = $2
-				; MlslAst.asem_pos  = Errors.UserPos(Parsing.rhs_start_pos 2)
-				} in
-			{ MlslAst.td_pos  = Errors.UserPos(Parsing.rhs_start_pos 3)
-			; MlslAst.td_kind = MlslAst.TDAttrDecl($3, asem, $5)
+	  KW_ATTR ID COLON typ_term {
+			{ MlslAst.td_pos  = Errors.UserPos(Parsing.rhs_start_pos 2)
+			; MlslAst.td_kind = MlslAst.TDAttrDecl($2, $4)
 			}
 		}
 	| KW_CONST ID COLON typ_term { 

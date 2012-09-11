@@ -1,7 +1,7 @@
 const projMatrix  : mat44
 const col         : vec4
 
-attr POSITION pos : vec4
+attr pos : vec4
 
 let vertex vs =
 	{ position = projMatrix * pos

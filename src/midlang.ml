@@ -42,27 +42,6 @@ type sampler =
 	; sampler_dim  : sampler_dim
 	}
 
-type semantics =
-| SInput0
-| SInput1
-| SInput2
-| SInput3
-| SInput4
-| SInput5
-| SInput6
-| SInput7
-| SPosition
-| STexcoord0
-| STexcoord1
-| STexcoord2
-| STexcoord3
-
-type attr =
-	{ attr_semantics : semantics
-	; attr_name      : string
-	; attr_var       : variable
-	}
-
 type param =
 	{ param_name : string
 	; param_var  : variable
@@ -147,7 +126,7 @@ let create_instr kind =
 
 type shader =
 	{ sh_name     : string
-	; sh_attr     : attr list
+	; sh_attr     : param list
 	; sh_v_const  : param list
 	; sh_f_const  : param list
 	; sh_varying  : param list
@@ -219,30 +198,11 @@ let varying_map = Hashtbl.create 32
 let sampler_map = Hashtbl.create 32
 
 let create_attr_list () =
-	Misc.ListExt.map_filter (fun (name, semantics, _) ->
+	Misc.ListExt.map_filter (fun (name, _) ->
 		if Hashtbl.mem attr_map name then
 			Some
-				{ attr_name      = name
-				; attr_semantics =
-					begin match semantics.MlslAst.asem_name with
-					| "INPUT0"    -> SInput0
-					| "INPUT1"    -> SInput1
-					| "INPUT2"    -> SInput2
-					| "INPUT3"    -> SInput3
-					| "INPUT4"    -> SInput4
-					| "INPUT5"    -> SInput5
-					| "INPUT6"    -> SInput6
-					| "INPUT7"    -> SInput7
-					| "POSITION"  -> SPosition
-					| "TEXCOORD0" -> STexcoord0
-					| "TEXCOORD1" -> STexcoord1
-					| "TEXCOORD2" -> STexcoord2
-					| "TEXCOORD3" -> STexcoord3
-					| sem -> 
-						Errors.error "Internal error: unknown semantics %s." sem;
-						SPosition
-					end
-				; attr_var       = Hashtbl.find attr_map name
+				{ param_name      = name
+				; param_var       = Hashtbl.find attr_map name
 				}
 		else None) (TopDef.attr_list ())
 
@@ -329,7 +289,7 @@ let reg_value_kind pos rv =
 let value_kind pos value =
 	EvalPrim.with_exn Unfold_exception (fun () -> EvalPrim.value_kind pos value)
 
-let reg_value_kind_of_attr pos program_type name semantics typ =
+let reg_value_kind_of_attr pos program_type name typ =
 	match program_type with
 	| PVertex ->
 		RVReg (
@@ -383,8 +343,8 @@ let const_or_reg_value_kind pos program_type rv =
 	| RVReg _ | RVRecord _ | RVSampler _ | RVPair _ | RVFunc _ | RVIfFunc _ -> kind
 	| RVValue value ->
 	begin match value_kind pos value with
-	| TopDef.VAttr(name, semantics, typ) ->
-		reg_value_kind_of_attr pos program_type name semantics typ
+	| TopDef.VAttr(name, typ) ->
+		reg_value_kind_of_attr pos program_type name typ
 	| TopDef.VConst(name, typ) ->
 		reg_value_kind_of_const pos program_type name typ
 	| TopDef.VSampler(name, typ) ->
@@ -407,8 +367,8 @@ let concrete_reg_value_kind pos program_type code rv =
 	| RVReg _ | RVRecord _ | RVSampler _ | RVPair _ | RVFunc _ | RVIfFunc _ -> kind
 	| RVValue value ->
 	begin match value_kind pos value with
-	| TopDef.VAttr(name, semantics, typ) ->
-		reg_value_kind_of_attr pos program_type name semantics typ
+	| TopDef.VAttr(name, typ) ->
+		reg_value_kind_of_attr pos program_type name typ
 	| TopDef.VConst(name, typ) ->
 		reg_value_kind_of_const pos program_type name typ
 	| TopDef.VSampler(name, typ) ->

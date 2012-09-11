@@ -1,8 +1,8 @@
 
 const projMatrix  : mat44
 
-attr POSITION  pos   : vec4
-attr TEXCOORD0 coord : vec2
+attr pos   : vec4
+attr coord : vec2
 
 sampler tex : sampler2D
 

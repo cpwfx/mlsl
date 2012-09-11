@@ -232,24 +232,6 @@ and fast_check_match_pattern gamma mp =
 
 (* ========================================================================= *)
 
-let check_semantics semantics =
-	match semantics.MlslAst.asem_name with
-	| "INPUT0"    -> ()
-	| "INPUT1"    -> ()
-	| "INPUT2"    -> ()
-	| "INPUT3"    -> ()
-	| "INPUT4"    -> ()
-	| "INPUT5"    -> ()
-	| "INPUT6"    -> ()
-	| "INPUT7"    -> ()
-	| "POSITION"  -> ()
-	| "TEXCOORD0" -> ()
-	| "TEXCOORD1" -> ()
-	| "TEXCOORD2" -> ()
-	| "TEXCOORD3" -> ()
-	| sn ->
-		Errors.error_p semantics.MlslAst.asem_pos "Unknown semantics: %s." sn
-
 let is_vertex_type (world, tp) =
 	match tp with
 	| TypeWorlds.TRecord r ->
@@ -273,12 +255,11 @@ let print_type_list l =
 
 (* ========================================================================= *)
 
-let check_attr_decl td name semantics typ =
+let check_attr_decl td name typ =
 	begin if not (MlslAst.is_reg_type typ.MlslAst.tt_typ) then
 		Errors.error_p typ.MlslAst.tt_pos
 			"Attributes with not register type forbidden."
 	end;
-	check_semantics semantics;
 	Globals.add name [typ.MlslAst.tt_typ] td.MlslAst.td_pos
 
 let check_const_decl td name typ =
@@ -336,8 +317,8 @@ let fast_check_shader td name definition =
 
 let check_topdef td =
 	match td.MlslAst.td_kind with
-	| MlslAst.TDAttrDecl(name, semantics, typ) ->
-		check_attr_decl td name semantics typ
+	| MlslAst.TDAttrDecl(name, typ) ->
+		check_attr_decl td name typ
 	| MlslAst.TDConstDecl(name, typ) ->
 		check_const_decl td name typ
 	| MlslAst.TDSamplerDecl(name, typ) ->
@@ -349,8 +330,8 @@ let check_topdef td =
 
 let fast_check_topdef td =
 	match td.MlslAst.td_kind with
-	| MlslAst.TDAttrDecl(name, semantics, typ) ->
-		check_attr_decl td name semantics typ
+	| MlslAst.TDAttrDecl(name, typ) ->
+		check_attr_decl td name typ
 	| MlslAst.TDConstDecl(name, typ) ->
 		check_const_decl td name typ
 	| MlslAst.TDSamplerDecl(name, typ) ->

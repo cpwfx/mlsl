@@ -4,7 +4,7 @@ const red         : vec4
 
 const projMatrix  : mat44
 
-attr POSITION pos : vec4
+attr pos : vec4
 
 let use_blue = true
 const use_red : bool
