@@ -289,7 +289,7 @@ let map_sampler sam =
 			; sam_index    = None
 			; sam_filter   = SFltrLinear
 			; sam_mipmap   = SMipDisable
-			; sam_wrapping = SWrapClamp
+			; sam_wrapping = SWrapRepeat
 			; sam_dim      = sam.Midlang.sampler_dim
 			} in
 		Hashtbl.replace sampler_map sam.Midlang.sampler_name result;
@@ -936,20 +936,31 @@ let bind_registers shader cnt code =
 	let reg_map = Array.init cnt (fun _ -> Array.make 4 []) in
 	bind_registers' reg_map shader code
 
-let rec remove_first_varying_mask var_set code =
-	match code with
-	| [] -> ()
-	| ins :: code ->
-		let dest = instr_dest ins in
-		if dest.dst_var.var_sort = VSVarying && not (VarSet.mem dest.dst_var var_set) then
-		begin
-			dest.dst_use_mask <- false;
-			remove_first_varying_mask (VarSet.add dest.dst_var var_set) code
-		end
-		else remove_first_varying_mask var_set code
+(* Remove mask in a first write to register *)
+let remove_first_mask =
+	let module Register = struct
+		type t = variable
+		let compare v1 v2 =
+			if v1.var_sort = v2.var_sort then
+				compare (fst (Misc.Opt.value v1.var_reg)) (fst (Misc.Opt.value v2.var_reg))
+			else
+				compare v1.var_sort v2.var_sort
+	end in
+	let module RegSet = Set.Make(Register) in
+	let rec remove_first_mask reg_set code =
+		match code with
+		| [] -> ()
+		| ins :: code ->
+			let dest = instr_dest ins in
+			if not (RegSet.mem dest.dst_var reg_set) then
+			begin
+				dest.dst_use_mask <- false;
+				remove_first_mask (RegSet.add dest.dst_var reg_set) code
+			end
+			else remove_first_mask reg_set code
+	in remove_first_mask RegSet.empty
 
 let finalize sh =
-	remove_first_varying_mask VarSet.empty sh.sh_vertex;
 	let ok =
 		bind_glob_registers "attributes" 8 
 			(List.map (fun attr -> attr.attr_var) sh.sh_glob.shg_attr) &&
@@ -970,8 +981,11 @@ let finalize sh =
 			bind_registers "fragment" 8 sh.sh_fragment
 		end
 	in
-	if ok then Some sh
-	else None
+	if ok then begin
+		remove_first_mask sh.sh_vertex;
+		remove_first_mask sh.sh_fragment;
+		Some sh
+	end else None
 
 (* ========================================================================= *)
 
