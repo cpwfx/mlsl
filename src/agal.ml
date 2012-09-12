@@ -1,5 +1,7 @@
 (* File: agal.ml *)
 
+open Misc.Dim
+
 type variable_sort =
 | VSAttribute
 | VSConstant
@@ -11,7 +13,7 @@ type variable =
 	{         var_id         : int
 	;         var_size       : int * int
 	; mutable var_reg        : (int * int) option
-	; mutable var_vec3output : bool (* set to true when con not contain w component *)
+	; mutable var_vec3output : bool (* set to true when can not contain w component *)
 	;         var_sort       : variable_sort
 	}
 
@@ -43,9 +45,10 @@ type dest_mask =
 	; dmask_w : bool
 	}
 type dest =
-	{ dst_var  : variable
-	; dst_row  : int
-	; dst_mask : dest_mask
+	{         dst_var      : variable
+	;         dst_row      : int
+	;         dst_mask     : dest_mask
+	; mutable dst_use_mask : bool
 	}
 
 type source_offset =
@@ -146,22 +149,66 @@ let variable_of_const c =
 
 (* ========================================================================= *)
 
+let fresh_var = Misc.Fresh.create ()
+let fresh_ins = Misc.Fresh.create ()
+
+let create_instr kind =
+	{ ins_id   = Misc.Fresh.next fresh_ins
+	; ins_kind = kind
+	}
+
+type instr_source =
+| InstrSource1       of source
+| InstrSource2       of source * source
+| InstrSourceSampler of source * sampler
+
 let instr_dest instr =
-	match instr with
+	match instr.ins_kind with
 	| IMov(dest, _)    | IAdd(dest, _, _) | ISub(dest, _, _) | IMul(dest, _, _)
 	| IDiv(dest, _, _) | IMin(dest, _, _) | IMax(dest, _, _) | IFrc(dest, _)    
 	| IPow(dest, _, _) | ICrs(dest, _, _) | IDp3(dest, _, _) | IDp4(dest, _, _) 
 	| INeg(dest, _)    | ISat(dest, _)    | IM33(dest, _, _) | IM44(dest, _, _) 
 	| IM34(dest, _, _) | ITex(dest, _, _) | ICrs2(dest, _, _) -> dest
 
+let instr_source instr =
+	match instr.ins_kind with
+	| IMov(_, src) | IFrc(_, src) | INeg(_, src) | ISat(_, src) -> InstrSource1 src
+	| IAdd(_, src1, src2) | ISub(_, src1, src2) | IMul(_, src1, src2) 
+	| IDiv(_, src1, src2) | IMin(_, src1, src2) | IMax(_, src1, src2) 
+	| IPow(_, src1, src2) | ICrs(_, src1, src2) | IDp3(_, src1, src2)
+	| IDp4(_, src1, src2) | IM33(_, src1, src2) | IM44(_, src1, src2) 
+	| IM34(_, src1, src2) | ICrs2(_, src1, src2) -> InstrSource2(src1, src2)
+	| ITex(_, src, sam) -> InstrSourceSampler(src, sam)
+
+let set_instr_source1 instr src1 =
+	create_instr (
+		match instr.ins_kind with
+		| IMov(dst, _)       -> IMov(dst, src1)
+		| IAdd(dst, _, src2) -> IAdd(dst, src1, src2)
+		| ISub(dst, _, src2) -> ISub(dst, src1, src2)
+		| IMul(dst, _, src2) -> IMul(dst, src1, src2)
+		| IDiv(dst, _, src2) -> IDiv(dst, src1, src2)
+		| IMin(dst, _, src2) -> IMin(dst, src1, src2)
+		| IMax(dst, _, src2) -> IMax(dst, src1, src2)
+		| IFrc(dst, _)       -> IFrc(dst, src1)
+		| IPow(dst, _, src2) -> IPow(dst, src1, src2)
+		| ICrs(dst, _, src2) -> ICrs(dst, src1, src2)
+		| IDp3(dst, _, src2) -> IDp3(dst, src1, src2)
+		| IDp4(dst, _, src2) -> IDp4(dst, src1, src2)
+		| INeg(dst, _)       -> INeg(dst, src1)
+		| ISat(dst, _)       -> ISat(dst, src1)
+		| IM33(dst, _, src2) -> IM33(dst, src1, src2)
+		| IM44(dst, _, src2) -> IM44(dst, src1, src2)
+		| IM34(dst, _, src2) -> IM34(dst, src1, src2)
+		| ITex(dst, _, sam)  -> ITex(dst, src1, sam)
+		| ICrs2(dst, _, src2) -> ICrs2(dst, src1, src2)
+	)
+
 (* ========================================================================= *)
 
 let var_map     = Hashtbl.create 32
 let sampler_map = Hashtbl.create 32
 let const_map   = Hashtbl.create 32
-
-let fresh_var = Misc.Fresh.create ()
-let fresh_ins = Misc.Fresh.create ()
 
 let get_const_reg const =
 	try
@@ -241,8 +288,8 @@ let map_sampler sam =
 			{ sam_name     = sam.Midlang.sampler_name
 			; sam_index    = None
 			; sam_filter   = SFltrLinear
-			; sam_mipmap   = SMipLinear
-			; sam_wrapping = SWrapRepeat
+			; sam_mipmap   = SMipDisable
+			; sam_wrapping = SWrapClamp
 			; sam_dim      = sam.Midlang.sampler_dim
 			} in
 		Hashtbl.replace sampler_map sam.Midlang.sampler_name result;
@@ -289,9 +336,10 @@ let make_swizzle swizzle =
 		;  MlslAst.Swizzle.component_id c3; MlslAst.Swizzle.component_id c4 |]
 
 let make_dest_float_reg reg =
-	{ dst_var  = reg
-	; dst_row  = 0
-	; dst_mask = dst_mask_float
+	{ dst_var      = reg
+	; dst_row      = 0
+	; dst_mask     = dst_mask_float
+	; dst_use_mask = true
 	}
 
 let make_dest_float reg = make_dest_float_reg (map_variable reg)
@@ -305,6 +353,7 @@ let make_dest_row_reg row dim reg =
 		| Misc.Dim.Dim3 -> dst_mask_vec3
 		| Misc.Dim.Dim4 -> dst_mask_vec4
 		end
+	; dst_use_mask = true
 	}
 let make_dest dim reg = make_dest_row_reg 0 dim (map_variable reg)
 let make_dest_row row dim reg = make_dest_row_reg row dim (map_variable reg)
@@ -321,6 +370,7 @@ let make_dest_comp comp reg =
 		| 3 -> dst_mask_w
 		| _ -> raise (Misc.Internal_error (Printf.sprintf "Invalid component index: %d" comp))
 		end
+	; dst_use_mask = true
 	}
 
 let make_dest_comp_reg comp reg =
@@ -334,6 +384,7 @@ let make_dest_comp_reg comp reg =
 		| 3 -> dst_mask_w
 		| _ -> raise (Misc.Internal_error (Printf.sprintf "Invalid component index: %d" comp))
 		end
+	; dst_use_mask = true
 	}
 
 let make_dest_output () =
@@ -346,6 +397,7 @@ let make_dest_output () =
 		}
 	; dst_row = 0
 	; dst_mask = dst_mask_vec4
+	; dst_use_mask = true
 	}
 
 let make_source_row row reg =
@@ -415,11 +467,6 @@ let make_const_vec dim value =
 	; src_row     = 0
 	; src_swizzle = [| 0; 0; 0; 0 |]
 	; src_offset  = None
-	}
-
-let create_instr kind =
-	{ ins_id   = Misc.Fresh.next fresh_ins
-	; ins_kind = kind
 	}
 
 let build_binop rv r1 r2 op =
@@ -715,6 +762,18 @@ let build_code globals code =
 			in (code, const)
 		)
 
+(* AGAL doesn't allow to use two consts as source registers *)
+let fixup_const_args ins =
+	match instr_source ins with
+	| InstrSource2(src1, src2) when 
+		src1.src_var.var_sort = VSConstant &&
+		src2.src_var.var_sort = VSConstant ->
+		let tmp = make_temp_reg 1 4 in
+		[ create_instr (IMov (make_dest_reg Dim4 tmp, make_source_dim_reg Dim4 src1.src_var))
+		; set_instr_source1 ins { src1 with src_var = tmp }
+		]
+	| _ -> [ ins ]
+
 let build sh =
 	Hashtbl.clear var_map;
 	let globals = map_globals sh in
@@ -723,8 +782,8 @@ let build sh =
 		Some
 			{ sh_name     = sh.Midlang.sh_name
 			; sh_glob     = add_const globals vs_const fs_const
-			; sh_vertex   = vs
-			; sh_fragment = fs
+			; sh_vertex   = Misc.ListExt.concat_map fixup_const_args vs
+			; sh_fragment = Misc.ListExt.concat_map fixup_const_args fs
 			}
 	))
 
@@ -870,14 +929,27 @@ let rec bind_registers' reg_map shader code =
 				field_map.(i) <-
 					List.filter (LiveVar.is_alive ins) vars
 			) field_map) reg_map;
-		begin bind_register_var reg_map shader (instr_dest ins.ins_kind).dst_var
+		begin bind_register_var reg_map shader (instr_dest ins).dst_var
 		end && bind_registers' reg_map shader code
 
 let bind_registers shader cnt code =
 	let reg_map = Array.init cnt (fun _ -> Array.make 4 []) in
 	bind_registers' reg_map shader code
 
+let rec remove_first_varying_mask var_set code =
+	match code with
+	| [] -> ()
+	| ins :: code ->
+		let dest = instr_dest ins in
+		if dest.dst_var.var_sort = VSVarying && not (VarSet.mem dest.dst_var var_set) then
+		begin
+			dest.dst_use_mask <- false;
+			remove_first_varying_mask (VarSet.add dest.dst_var var_set) code
+		end
+		else remove_first_varying_mask var_set code
+
 let finalize sh =
+	remove_first_varying_mask VarSet.empty sh.sh_vertex;
 	let ok =
 		bind_glob_registers "attributes" 8 
 			(List.map (fun attr -> attr.attr_var) sh.sh_glob.shg_attr) &&
@@ -980,13 +1052,15 @@ let create_sampler_json samplers =
 	) samplers;
 	Json.JsList sam_list
 
-let create_mask_bin mask offset =
-	(
-		(if mask.dmask_x then 1 else 0) lor
-		(if mask.dmask_y then 2 else 0) lor
-		(if mask.dmask_z then 4 else 0) lor
-		(if mask.dmask_w then 8 else 0)
-	) lsl offset
+let create_mask_bin mask offset use_mask =
+	if use_mask then
+		(
+			(if mask.dmask_x then 1 else 0) lor
+			(if mask.dmask_y then 2 else 0) lor
+			(if mask.dmask_z then 4 else 0) lor
+			(if mask.dmask_w then 8 else 0)
+		) lsl offset
+	else 15
 
 let dest_bytecode bytecode dst =
 	(* Register number *)
@@ -994,7 +1068,10 @@ let dest_bytecode bytecode dst =
 		(dst.dst_row + (fst (Misc.Opt.value dst.dst_var.var_reg)));
 	(* Write mask *)
 	Misc.ByteArray.append_byte bytecode
-		(create_mask_bin dst.dst_mask (snd (Misc.Opt.value dst.dst_var.var_reg)));
+		(create_mask_bin 
+			dst.dst_mask 
+			(snd (Misc.Opt.value dst.dst_var.var_reg)) 
+			dst.dst_use_mask);
 	(* Register type *)
 	Misc.ByteArray.append_byte bytecode (varsort_to_int dst.dst_var.var_sort)
 
@@ -1232,7 +1309,7 @@ let dest_asm program_type dst =
 		register_name program_type dst.dst_var.var_sort
 			(dst.dst_row + (fst (Misc.Opt.value dst.dst_var.var_reg))) in
 	let mask =
-		create_mask_bin dst.dst_mask (snd (Misc.Opt.value dst.dst_var.var_reg)) in
+		create_mask_bin dst.dst_mask (snd (Misc.Opt.value dst.dst_var.var_reg)) dst.dst_use_mask in
 	reg_name ^
 		(if mask = 15 then ""
 		else

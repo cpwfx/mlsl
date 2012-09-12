@@ -11,7 +11,7 @@ type variable =
 	{         var_id         : int
 	;         var_size       : int * int
 	; mutable var_reg        : (int * int) option
-	; mutable var_vec3output : bool (* set to true when con not contain w component *)
+	; mutable var_vec3output : bool (* set to true when can not contain w component *)
 	;         var_sort       : variable_sort
 	}
 
@@ -43,9 +43,10 @@ type dest_mask =
 	; dmask_w : bool
 	}
 type dest =
-	{ dst_var  : variable
-	; dst_row  : int
-	; dst_mask : dest_mask
+	{         dst_var      : variable
+	;         dst_row      : int
+	;         dst_mask     : dest_mask
+	; mutable dst_use_mask : bool
 	}
 
 type source_offset =
