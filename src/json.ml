@@ -10,6 +10,14 @@ and json =
 | JsObj    of json_obj
 | JsString of string
 
+(* JSON does not allow numbers in format digit+ '.' *)
+let json_string_of_float f =
+	let result = string_of_float f in
+	if result.[String.length result - 1] = '.' then
+		result ^ "0"
+	else
+		result
+
 let create_list = Misc.ImpList.of_list
 let create_obj = Misc.ImpList.of_list
 
@@ -18,7 +26,7 @@ let list_add = Misc.ImpList.add
 let rec write_json out indent json =
 	match json with
 	| JsInt  n -> output_string out (string_of_int n)
-	| JsFloat f -> output_string out (string_of_float f)
+	| JsFloat f -> output_string out (json_string_of_float f)
 	| JsList l ->
 		begin match Misc.ImpList.to_list l with
 		| [] -> output_string out "[ ]";
