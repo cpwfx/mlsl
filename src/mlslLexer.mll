@@ -59,6 +59,7 @@ let _ =
 	Hashtbl.add op_map ">=" MlslParser.GE;
 	Hashtbl.add op_map ">"  MlslParser.GT;
 	Hashtbl.add op_map "^"  MlslParser.HAT;
+	Hashtbl.add op_map "#"  MlslParser.JOIN;
 	Hashtbl.add op_map "<=" MlslParser.LE;
 	Hashtbl.add op_map "<"  MlslParser.LT;
 	Hashtbl.add op_map "-"  MlslParser.MINUS;

@@ -78,6 +78,13 @@ type binop =
 | BODot   of Misc.Dim.dim
 | BOCross2
 | BOCross3
+| BOJoinFF
+| BOJoinFV of Misc.Dim.dim
+| BOJoinVF of Misc.Dim.dim
+| BOJoinVV
+| BOJoinVM of Misc.Dim.dim * Misc.Dim.dim
+| BOJoinMV of Misc.Dim.dim * Misc.Dim.dim
+| BOJoinMM of Misc.Dim.dim
 | BOPowI
 | BOPowFF
 | BOPowVF of Misc.Dim.dim

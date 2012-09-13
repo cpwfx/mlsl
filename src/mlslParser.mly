@@ -3,8 +3,8 @@
 %token <float>  FLOAT
 %token EOF
 %token BR_OPN BR_CLS SBR_OPN SBR_CLS CBR_OPN CBR_CLS
-%token AMPER ARROW COLON COMMA CONS DIV DOT EQ GE GT HAT LE LT MINUS MOD MUL
-%token NEQ PIPE PLUS POW SEMI
+%token AMPER ARROW COLON COMMA CONS DIV DOT EQ GE GT HAT JOIN LE LT MINUS MOD 
+%token MUL NEQ PIPE PLUS POW SEMI
 %token ANY UNIT
 %token KW_AND KW_ATTR KW_BEGIN KW_BOOL KW_CONST KW_ELSE KW_END KW_FALSE KW_FIX
 %token KW_FLOAT KW_FRAGMENT KW_FUN KW_IF KW_IN KW_INT KW_LET KW_MAT22 KW_MAT23
@@ -19,6 +19,7 @@
 %right CONS
 %left  MINUS PLUS
 %left  AMPER DIV HAT MOD MUL
+%left  JOIN
 %left  UMINUS UPLUS
 %right POW
 
@@ -154,6 +155,10 @@ expr:
 	| expr MUL expr {
 			MlslAst.make_expr (Parsing.rhs_start_pos 2) 
 				(MlslAst.EBinOp(MlslAst.BOMul, $1, $3))
+		}
+	| expr JOIN expr {
+			MlslAst.make_expr (Parsing.rhs_start_pos 2)
+				(MlslAst.EBinOp(MlslAst.BOJoin, $1, $3))
 		}
 	| MINUS expr %prec UMINUS {
 			MlslAst.make_expr (Parsing.rhs_start_pos 1) 

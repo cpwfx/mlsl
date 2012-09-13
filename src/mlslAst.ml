@@ -140,6 +140,7 @@ type binop =
 | BOMod
 | BODot
 | BOCross
+| BOJoin
 | BOPow
 (* Operators unavailabe from code (only from builtins) *)
 | BOMin
@@ -336,6 +337,7 @@ let binop_name op =
 	| BOMod   -> "modulo"
 	| BODot   -> "dot product"
 	| BOCross -> "cross product"
+	| BOJoin  -> "join"
 	| BOPow   -> "power"
 	| BOMin   -> "minimum"
 

@@ -373,6 +373,18 @@ let make_dest_comp comp reg =
 	; dst_use_mask = true
 	}
 
+let make_dest_comp_rng rng_start rng_len reg =
+	{ dst_var  = map_variable reg
+	; dst_row  = 0
+	; dst_mask =
+		{ dmask_x = rng_start <= 0 && 0 < rng_start + rng_len
+		; dmask_y = rng_start <= 1 && 1 < rng_start + rng_len
+		; dmask_z = rng_start <= 2 && 2 < rng_start + rng_len
+		; dmask_w = rng_start <= 3 && 3 < rng_start + rng_len
+		}
+	; dst_use_mask = true
+	}
+
 let make_dest_comp_reg comp reg =
 	{ dst_var  = reg
 	; dst_row  = 0
@@ -456,12 +468,23 @@ let make_source_reg reg =
 	; src_offset  = None
 	}
 
+let make_source_shift shift dim reg =
+	Printf.printf "SHIFT : %d, DIM : %d\n" shift (int_of_dim dim);
+	let shift_field field =
+		max 0 (min (field - shift) (int_of_dim dim - 1)) in
+	{ src_var     = map_variable reg
+	; src_row     = 0
+	; src_swizzle = [| 0; shift_field 1; shift_field 2; shift_field 3 |]
+	; src_offset  = None
+	}
+
 let make_const_float value =
 	{ src_var     = get_const_reg [[value]]
 	; src_row     = 0
 	; src_swizzle = [| 0; 0; 0; 0 |]
 	; src_offset  = None
 	}
+
 let make_const_vec dim value =
 	{ src_var     = get_const_reg [ Array.to_list value ]
 	; src_row     = 0
@@ -654,6 +677,44 @@ let build_binop rv r1 r2 op =
 	| Midlang.BOCross3 ->
 		Some [create_instr 
 			(ICrs(make_dest Misc.Dim.Dim3 rv, make_source r1, make_source r2))]
+	| Midlang.BOJoinFF ->
+		Some
+			[ create_instr (IMov(make_dest_comp 0 rv, make_source_float r1))
+			; create_instr (IMov(make_dest_comp 1 rv, make_source_float r2))
+			]
+	| Midlang.BOJoinFV d ->
+		Some
+			[ create_instr (IMov(make_dest_comp 0 rv, make_source_float r1))
+			; create_instr (IMov(make_dest_comp_rng 1 (int_of_dim d) rv, 
+				make_source_shift 1 d r2))
+			]
+	| Midlang.BOJoinVF d ->
+		Some
+			[ create_instr (IMov(make_dest_comp_rng 0 (int_of_dim d) rv, make_source r1))
+			; create_instr (IMov(make_dest_comp (int_of_dim d) rv, make_source_float r2))
+			]
+	| Midlang.BOJoinVV ->
+		Some
+			[ create_instr (IMov(make_dest_comp_rng 0 2 rv, make_source r1))
+			; create_instr (IMov(make_dest_comp_rng 2 2 rv, make_source_shift 2 Dim2 r2))
+			]
+	| Midlang.BOJoinVM(rdim, dim) ->
+		Some (create_instr (IMov(make_dest dim rv, make_source r1)) ::
+			List.map (fun row ->
+				create_instr (IMov(make_dest_row (row + 1) dim rv, make_source_row row r2))
+			) (range_of_dim rdim))
+	| Midlang.BOJoinMV(rdim, dim) ->
+		Some (List.map (fun row ->
+				create_instr (IMov(make_dest_row row dim rv, make_source_row row r1))
+			) (range_of_dim rdim) @ 
+			[ create_instr (IMov(make_dest_row (int_of_dim rdim) dim rv, make_source r2 )) ])
+	| Midlang.BOJoinMM dim ->
+		Some
+			[ create_instr (IMov(make_dest_row 0 dim rv, make_source_row 0 r1))
+			; create_instr (IMov(make_dest_row 1 dim rv, make_source_row 1 r1))
+			; create_instr (IMov(make_dest_row 2 dim rv, make_source_row 0 r2))
+			; create_instr (IMov(make_dest_row 3 dim rv, make_source_row 1 r2))
+			]
 	| Midlang.BOPowI | Midlang.BOPowFF ->
 		Some [create_instr 
 			(IPow(make_dest_float rv, make_source_float r1, make_source_float r2))]
@@ -1353,7 +1414,7 @@ let create_swizzle_asm swizzle fld_offset dest_offset =
 		| 1 -> "y"
 		| 2 -> "z"
 		| 3 -> "w"
-		| _ -> "#" in
+		| _ -> "w" in
 	"." ^ (comp_to_str comp0) ^ (comp_to_str comp1) ^
 	      (comp_to_str comp2) ^ (comp_to_str comp3)
 

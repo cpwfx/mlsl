@@ -287,6 +287,43 @@ let eval_binop pos op v1 v2 =
 				(TopDef.string_of_value_kind kind1) (TopDef.string_of_value_kind kind2);
 			raise EvalPrim_exception
 		end
+	| MlslAst.BOJoin ->
+		begin match value_kind pos v1, value_kind pos v2 with
+		| TopDef.VInt n1, TopDef.VInt n2 ->
+			TopDef.make_value pos (TopDef.VVec(Dim2, [| float_of_int n1; float_of_int n2 |]))
+		| TopDef.VInt n1, TopDef.VFloat f2 ->
+			TopDef.make_value pos (TopDef.VVec(Dim2, [| float_of_int n1; f2 |]))
+		| TopDef.VInt n1, TopDef.VVec(d2, v2) when 1 + int_of_dim d2 <= 4 ->
+			TopDef.make_value pos (TopDef.VVec(dim_of_int (1 + int_of_dim d2), 
+				Array.append [| float_of_int n1 |] v2))
+		| TopDef.VFloat f1, TopDef.VInt n2 ->
+			TopDef.make_value pos (TopDef.VVec(Dim2, [| f1; float_of_int n2 |]))
+		| TopDef.VFloat f1, TopDef.VFloat f2 ->
+			TopDef.make_value pos (TopDef.VVec(Dim2, [| f1; f2 |]))
+		| TopDef.VFloat f1, TopDef.VVec(d2, v2) when 1 + int_of_dim d2 <= 4 ->
+			TopDef.make_value pos (TopDef.VVec(dim_of_int (1 + int_of_dim d2), 
+				Array.append [| f1 |] v2))
+		| TopDef.VVec(d1, v1), TopDef.VInt n2 when int_of_dim d1 + 1 <= 4 ->
+			TopDef.make_value pos (TopDef.VVec(dim_of_int (int_of_dim d1 + 1),
+				Array.append v1 [| float_of_int n2 |]))
+		| TopDef.VVec(d1, v1), TopDef.VFloat f2 when int_of_dim d1 + 1 <= 4 ->
+			TopDef.make_value pos (TopDef.VVec(dim_of_int (int_of_dim d1 + 1),
+				Array.append v1 [| f2 |]))
+		| TopDef.VVec(Dim2, v1), TopDef.VVec(Dim2, v2) ->
+			TopDef.make_value pos (TopDef.VVec(Dim4, Array.append v1 v2))
+		| TopDef.VVec(d2, v1), TopDef.VMat(d1, d2', m2) when d2 = d2' && 1 + int_of_dim d1 <= 4 ->
+			TopDef.make_value pos (TopDef.VMat(dim_of_int (int_of_dim d1 + 1), d2,
+				Array.append [| v1 |] m2))
+		| TopDef.VMat(d1, d2, m1), TopDef.VVec(d2', v2) when d2 = d2' && int_of_dim d1 + 1 <= 4 ->
+			TopDef.make_value pos (TopDef.VMat(dim_of_int (int_of_dim d1 + 1), d2,
+				Array.append m1 [| v2 |]))
+		| TopDef.VMat(Dim2, d, m1), TopDef.VMat(Dim2, d', m2) when d = d' ->
+			TopDef.make_value pos (TopDef.VMat(Dim4, d, Array.append m1 m2))
+		| kind1, kind2 ->
+			Errors.error_p pos "Join of %s and %s is not defined."
+				(TopDef.string_of_value_kind kind1) (TopDef.string_of_value_kind kind2);
+			raise EvalPrim_exception
+		end
 	| MlslAst.BOPow ->
 		begin match value_kind pos v1, value_kind pos v2 with
 		| TopDef.VInt n1, TopDef.VInt n2 ->

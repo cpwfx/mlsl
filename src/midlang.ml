@@ -86,6 +86,13 @@ type binop =
 | BODot   of dim
 | BOCross2
 | BOCross3
+| BOJoinFF
+| BOJoinFV of dim
+| BOJoinVF of dim
+| BOJoinVV
+| BOJoinVM of dim * dim
+| BOJoinMV of dim * dim
+| BOJoinMM of dim
 | BOPowI
 | BOPowFF
 | BOPowVF of dim
@@ -583,6 +590,13 @@ let ins_binop_mod_mf d1 d2    = ins_binop (TMat(d1, d2)) (BOModMF(d1, d2))
 let ins_binop_dot d           = ins_binop TFloat (BODot d)
 let ins_binop_cross2          = ins_binop TFloat BOCross2
 let ins_binop_cross3          = ins_binop (TVec Dim3) BOCross3
+let ins_binop_join_ff         = ins_binop TFloat BOJoinFF
+let ins_binop_join_fv d       = ins_binop (TVec (dim_succ d)) (BOJoinFV d)
+let ins_binop_join_vf d       = ins_binop (TVec (dim_succ d)) (BOJoinVF d)
+let ins_binop_join_vv         = ins_binop (TVec Dim4) BOJoinVV
+let ins_binop_join_vm d1 d2   = ins_binop (TMat(dim_succ d1, d2)) (BOJoinVM(d1, d2))
+let ins_binop_join_mv d1 d2   = ins_binop (TMat(dim_succ d1, d2)) (BOJoinMV(d1, d2))
+let ins_binop_join_mm d       = ins_binop (TMat(Dim4, d)) (BOJoinMM d)
 let ins_binop_pow_i           = ins_binop TInt BOPowI
 let ins_binop_pow_ff          = ins_binop TFloat BOPowFF
 let ins_binop_pow_vf d        = ins_binop (TVec d) (BOPowVF d)
@@ -756,6 +770,30 @@ let unfold_cross pos code reg1 reg2 =
 		make_reg_value pos (RVReg (ins_binop_cross3 code reg1 reg2))
 	| tp1, tp2 ->
 		Errors.error_p pos "Cross product for types %s * %s is not defined."
+			(string_of_typ tp1) (string_of_typ tp2);
+		raise Unfold_exception
+
+let unfold_join pos code reg1 reg2 =
+	match reg1.var_typ, reg2.var_typ with
+	| (TInt | TFloat), (TInt | TFloat) ->
+		make_reg_value pos (RVReg (ins_binop_join_ff code 
+			(ins_convert_2f code reg1) (ins_convert_2f code reg2)))
+	| (TInt | TFloat), TVec d when 1 + int_of_dim d <= 4 ->
+		make_reg_value pos (RVReg (ins_binop_join_fv d code
+			(ins_convert_2f code reg1) reg2))
+	| TVec d, (TInt | TFloat) ->
+		make_reg_value pos (RVReg (ins_binop_join_vf d code
+			reg1 (ins_convert_2f code reg2)))
+	| TVec Dim2, TVec Dim2 ->
+		make_reg_value pos (RVReg (ins_binop_join_vv code reg1 reg2))
+	| TVec d2, TMat(d1, d2') when 1 + int_of_dim d1 <= 4 && d2 = d2' ->
+		make_reg_value pos (RVReg (ins_binop_join_vm d1 d2 code reg1 reg2))
+	| TMat(d1, d2), TVec d2' when 1 + int_of_dim d1 <= 4 && d2 = d2' ->
+		make_reg_value pos (RVReg (ins_binop_join_mv d1 d2 code reg1 reg2))
+	| TMat(Dim2, d), TMat(Dim2, d') when d = d' ->
+		make_reg_value pos (RVReg (ins_binop_join_mm d code reg1 reg2))
+	| tp1, tp2 ->
+		Errors.error_p pos "Join for types %s * %s is not defined."
 			(string_of_typ tp1) (string_of_typ tp2);
 		raise Unfold_exception
 
@@ -969,6 +1007,8 @@ let unfold_binop pos program_type code op rkind1 rkind2 =
 			unfold_dot pos code r1 r2
 		| MlslAst.BOCross ->
 			unfold_cross pos code r1 r2
+		| MlslAst.BOJoin ->
+			unfold_join pos code r1 r2
 		| MlslAst.BOPow ->
 			unfold_pow pos code r1 r2
 		| MlslAst.BOMin ->

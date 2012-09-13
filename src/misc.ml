@@ -225,6 +225,12 @@ module Dim = struct
 	| Dim2
 	| Dim3
 	| Dim4
+	let dim_of_int i =
+		match i with
+		| 2 -> Dim2
+		| 3 -> Dim3
+		| 4 -> Dim4
+		| _ -> invalid_arg (Printf.sprintf "%d can not be converted to dim." i)
 	let int_of_dim dim =
 		match dim with
 		| Dim2 -> 2
@@ -235,6 +241,11 @@ module Dim = struct
 		| Dim2 -> [ 0; 1 ]
 		| Dim3 -> [ 0; 1; 2 ]
 		| Dim4 -> [ 0; 1; 2; 3 ]
+	let dim_succ dim =
+		match dim with
+		| Dim2 -> Dim3
+		| Dim3 -> Dim4
+		| _ -> invalid_arg "Dim4 has no successor."
 end
 
 module Fresh = struct

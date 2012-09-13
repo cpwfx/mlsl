@@ -76,6 +76,7 @@ type binop =
 | BOMod
 | BODot
 | BOCross
+| BOJoin
 | BOPow
 (* Operators unavailabe from code (only from builtins) *)
 | BOMin

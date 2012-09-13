@@ -69,8 +69,10 @@ module Dim : sig
 	| Dim2
 	| Dim3
 	| Dim4
+	val dim_of_int : int -> dim
 	val int_of_dim : dim -> int
 	val range_of_dim : dim -> int list
+	val dim_succ : dim -> dim
 end
 
 module Fresh : sig
