@@ -1,0 +1,5 @@
+(* MLSL Prelude file. *)
+
+let vec2 (x : float) (y : float) = x # y
+let vec3 (x : float) (y : float) (z : float) = x # y # z
+let vec4 (x : float) (y : float) (z : float) (w : float) = x # y # z # w

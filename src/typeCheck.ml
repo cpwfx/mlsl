@@ -342,7 +342,7 @@ let fast_check_topdef td =
 		fast_check_shader td name definition
 
 let check topdef_list =
-	List.iter check_topdef topdef_list
-
-let fast_check topdef_list =
-	List.iter fast_check_topdef topdef_list
+	if !Settings.check_types then
+		List.iter check_topdef topdef_list
+	else
+		List.iter fast_check_topdef topdef_list

@@ -72,6 +72,28 @@ typ_term:
 		}
 ;
 
+expr_id:
+	  ID             { $1            }
+	| KW_BOOL        { "bool"        }
+	| KW_FLOAT       { "float"       }
+	| KW_INT         { "int"         }
+	| KW_MAT22       { "mat22"       }
+	| KW_MAT23       { "mat23"       }
+	| KW_MAT24       { "mat24"       }
+	| KW_MAT32       { "mat32"       }
+	| KW_MAT33       { "mat33"       }
+	| KW_MAT34       { "mat34"       }
+	| KW_MAT42       { "mat42"       }
+	| KW_MAT43       { "mat43"       }
+	| KW_MAT44       { "mat44"       }
+	| KW_SAMPLER2D   { "sampler2D"   }
+	| KW_SAMPLERCUBE { "samplerCube" }
+	| KW_UNIT        { "unit"        }
+	| KW_VEC2        { "vec2"        }
+	| KW_VEC3        { "vec3"        }
+	| KW_VEC4        { "vec4"        }
+;
+
 expr:
 	  KW_LET let_pattern KW_IN expr %prec STMT {
 			MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.ELet(fst $2, snd $2, $4))
@@ -83,7 +105,7 @@ expr:
 			let pos = Parsing.rhs_start_pos 1 in
 			MlslAst.make_expr pos (MlslAst.EAbs($2, MlslAst.make_abs_rev pos $3 $5))
 		}
-	| KW_FUN KW_REC ID pattern_atom pattern_atom_list_rev EQ expr %prec STMT {
+	| KW_FUN KW_REC expr_id pattern_atom pattern_atom_list_rev EQ expr %prec STMT {
 			let pos = Parsing.rhs_start_pos 1 in
 			let pat = MlslAst.make_pattern (Parsing.rhs_start_pos 3) (MlslAst.PVar $3) in
 			MlslAst.make_expr pos (MlslAst.EFix(pat, 
@@ -191,7 +213,7 @@ expr_call_atom_list_rev:
 expr_call_atom:
 	  NAT { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EInt $1) }
 	| FLOAT { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EFloat $1) }
-	| ID  {	MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar $1) }
+	| expr_id { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar $1) }
 	| VARYING { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVarying $1) }
 	| CONSTR  { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EConstrU $1) }
 	| UNIT    { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EConstrU "()") }
@@ -207,7 +229,7 @@ expr_call_atom:
 	| CBR_OPN record_values_rev CBR_CLS {
 			MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.ERecord (List.rev $2))
 		}
-	| expr_call_atom DOT ID {
+	| expr_call_atom DOT expr_id {
 			MlslAst.make_select (Parsing.rhs_start_pos 2) $1 $3
 		}
 	| KW_BOOL { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "bool") }
@@ -226,7 +248,7 @@ expr_call_atom:
 
 let_pattern:
 	  pattern EQ expr { ($1, $3) }
-	| ID pattern_atom pattern_atom_list_rev EQ expr {
+	| expr_id pattern_atom pattern_atom_list_rev EQ expr {
 			let pos = Parsing.rhs_start_pos 1 in
 			( MlslAst.make_pattern pos (MlslAst.PVar $1)
 			, MlslAst.make_expr pos (MlslAst.EAbs($2, MlslAst.make_abs_rev pos $3 $5))
@@ -245,7 +267,7 @@ record_values_rev:
 ;
 
 record_field_value:
-	ID EQ expr {
+	expr_id EQ expr {
 			{ MlslAst.rfv_pos   = Errors.UserPos(Parsing.rhs_start_pos 1)
 			; MlslAst.rfv_name  = $1
 			; MlslAst.rfv_value = $3
@@ -288,7 +310,7 @@ when_opt:
 ;
 
 pattern:
-	  ID COLON typ_term {
+	  expr_id COLON typ_term {
 			MlslAst.make_pattern (Parsing.rhs_start_pos 1) (MlslAst.PTypedVar($1, $3))
 		}
 	| untyped_pattern { $1 }
@@ -311,7 +333,7 @@ untyped_pattern:
 pattern_atom:
 	  BR_OPN pattern BR_CLS { $2 }
 	| ANY { MlslAst.make_pattern (Parsing.rhs_start_pos 1) MlslAst.PAny }
-	| ID  { MlslAst.make_pattern (Parsing.rhs_start_pos 1) (MlslAst.PVar $1) }
+	| expr_id { MlslAst.make_pattern (Parsing.rhs_start_pos 1) (MlslAst.PVar $1) }
 	| UNIT { MlslAst.make_pattern (Parsing.rhs_start_pos 1) (MlslAst.PConstrU "()") }
 	| KW_TRUE { MlslAst.make_pattern (Parsing.rhs_start_pos 1) (MlslAst.PTrue) }
 	| KW_FALSE { MlslAst.make_pattern (Parsing.rhs_start_pos 1) (MlslAst.PFalse) }
@@ -331,12 +353,12 @@ pattern_atom_list_rev:
 ;
 
 topdef:
-	  KW_ATTR ID COLON typ_term {
+	  KW_ATTR expr_id COLON typ_term {
 			{ MlslAst.td_pos  = Errors.UserPos(Parsing.rhs_start_pos 2)
 			; MlslAst.td_kind = MlslAst.TDAttrDecl($2, $4)
 			}
 		}
-	| KW_CONST ID COLON typ_term { 
+	| KW_CONST expr_id COLON typ_term { 
 			{ MlslAst.td_pos  = Errors.UserPos(Parsing.rhs_start_pos 2)
 			; MlslAst.td_kind = MlslAst.TDConstDecl($2, $4)
 			}
@@ -349,7 +371,7 @@ topdef:
 	| KW_LET KW_REC let_pattern let_patterns_rev {
 			MlslAst.make_topdef_let_rec (Parsing.rhs_start_pos 1) ($3 :: List.rev $4)
 		}
-	| KW_LET KW_FRAGMENT ID pattern_atom_list_rev EQ expr {
+	| KW_LET KW_FRAGMENT expr_id pattern_atom_list_rev EQ expr {
 			let pos = Parsing.rhs_start_pos 2 in
 			{ MlslAst.td_pos  = Errors.UserPos(Parsing.rhs_start_pos 3)
 			; MlslAst.td_kind = MlslAst.TDLocalDef
@@ -359,7 +381,7 @@ topdef:
 				)
 			}
 		}
-	| KW_LET KW_VERTEX ID pattern_atom_list_rev EQ expr {
+	| KW_LET KW_VERTEX expr_id pattern_atom_list_rev EQ expr {
 			let pos = Parsing.rhs_start_pos 2 in
 			{ MlslAst.td_pos  = Errors.UserPos(Parsing.rhs_start_pos 3)
 			; MlslAst.td_kind = MlslAst.TDLocalDef
@@ -369,12 +391,12 @@ topdef:
 				)
 			}
 		}
-	| KW_LET KW_SHADER ID EQ expr {
+	| KW_LET KW_SHADER expr_id EQ expr {
 			{ MlslAst.td_pos  = Errors.UserPos(Parsing.rhs_start_pos 3)
 			; MlslAst.td_kind = MlslAst.TDShader($3, $5)
 			}
 		}
-	| KW_SAMPLER ID COLON typ_term {
+	| KW_SAMPLER expr_id COLON typ_term {
 			{ MlslAst.td_pos = Errors.UserPos(Parsing.rhs_start_pos 2)
 			; MlslAst.td_kind = MlslAst.TDSamplerDecl($2, $4)
 			}

@@ -1,23 +1,29 @@
 SRCDIR=src
 OBJDIR=obj
 BINDIR=bin
+LIBDIR=lib
 INSTALL_BINDIR=/usr/local/bin
-OCAMLFILES=misc errors final json littleEndian mlslAst parserMisc mlslParser \
-	mlslLexer parser typeWorlds topDef typeCheck evalPrim midlang dataflow \
-	analysis agal eval builtin
+INSTALL_LIBDIR=/usr/local/lib/mlsl
+OCAMLFILES=misc errors final json littleEndian settings mlslAst parserMisc \
+	mlslParser mlslLexer parser typeWorlds topDef typeCheck evalPrim midlang \
+	dataflow analysis agal eval builtin
 .PHONY: all install mlslYacc clean
 
 all: $(OBJDIR) $(BINDIR) \
 	$(foreach file, $(OCAMLFILES), $(OBJDIR)/$(file).cmi) $(BINDIR)/mlsl
 
-install: all
-	install $(BINDIR)/mlsl $(INSTALL_BINDIR)
+install: all $(INSTALL_LIBDIR)
+	install $(BINDIR)/mlsl $(INSTALL_BINDIR) ; \
+	cp $(LIBDIR)/* $(INSTALL_LIBDIR)
 
 $(OBJDIR):
 	mkdir $(OBJDIR)
 
 $(BINDIR):
 	mkdir $(BINDIR)
+
+$(INSTALL_LIBDIR):
+	mkdir $(INSTALL_LIBDIR)
 
 $(BINDIR)/mlsl: $(foreach file, $(OCAMLFILES), $(OBJDIR)/$(file).cmx) \
 	$(OBJDIR)/mlsl.cmx

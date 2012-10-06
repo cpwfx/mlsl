@@ -1,6 +1,4 @@
 
-let check_types = ref false
-
 let sources = Misc.ImpList.create ()
 
 let add_target target =
@@ -14,9 +12,9 @@ let add_source source =
 	Misc.ImpList.add sources source
 
 let cmd_args_options =
-	[ "-T",          Arg.Set check_types, 
+	[ "-T",          Arg.Set Settings.check_types, 
 		"  Enable typechecking"
-	; "--typecheck", Arg.Bool (fun b -> check_types := b), 
+	; "--typecheck", Arg.Bool (fun b -> Settings.check_types := b), 
 		"  Enable/disable typechecking"
 	; "-t",          Arg.Symbol(["agal"; "agalAsm"; "dummy"], add_target),
 		"  Same as --target"
@@ -32,13 +30,15 @@ let _ =
 	if Misc.ImpList.is_empty sources then
 		print_endline "No input files. For more information, try '--help' option."
 	else begin
+		Misc.Opt.iter (Parser.parse Settings.prelude_file)
+			(fun prelude_td ->
+				TypeCheck.check prelude_td;
+				Eval.eval_all prelude_td
+			);
 		Misc.ImpList.iter (fun file ->
 			begin try match Parser.parse file with
 			| Some td_list ->
-				if !check_types then
-					TypeCheck.check td_list
-				else
-					TypeCheck.fast_check td_list;
+				TypeCheck.check td_list;
 				if Errors.ok () then
 					Eval.eval_all td_list
 				else ()
