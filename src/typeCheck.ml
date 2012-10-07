@@ -123,6 +123,9 @@ let rec infer_type gamma worlds expr =
 	| MlslAst.EMatch(e1, mp) ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EMatch.";
 		[]
+	| MlslAst.EMatchType(e1, mtp) ->
+		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EMatchType.";
+		[]
 	| MlslAst.EFragment e ->
 		Errors.error_p expr.MlslAst.e_pos "Unimplemented: infer_type EFragment.";
 		[]
@@ -138,6 +141,22 @@ let rec infer_type gamma worlds expr =
 	end
 
 (* ========================================================================= *)
+
+let rec fast_check_type_pattern pos tp =
+	match tp with
+	| MlslAst.TPAny | MlslAst.TPBool | MlslAst.TPFloat | MlslAst.TPInt
+	| MlslAst.TPMat _ | MlslAst.TPSampler2D | MlslAst.TPSamplerCube 
+	| MlslAst.TPUnit | MlslAst.TPVec _ -> 
+		()
+	| MlslAst.TPOr(tp1, tp2) ->
+		fast_check_type_pattern pos tp1;
+		fast_check_type_pattern pos tp2
+	| MlslAst.TPArrow(MlslAst.TPAny, MlslAst.TPAny) -> ()
+	| MlslAst.TPArrow(_, _) ->
+		Errors.error_p pos "Non trivial functional pattern in typeless mode."
+	| MlslAst.TPPair(tp1, tp2) ->
+		fast_check_type_pattern pos tp1;
+		fast_check_type_pattern pos tp2
 
 let rec pattern_variables pat =
 	match pat.MlslAst.p_kind with
@@ -206,6 +225,9 @@ let rec fast_check_code gamma expr =
 	| MlslAst.EMatch(e, mps) ->
 		fast_check_code gamma e;
 		List.iter (fast_check_match_pattern gamma) mps
+	| MlslAst.EMatchType(e, mtps) ->
+		fast_check_code gamma e;
+		List.iter (fast_check_matchto_pattern gamma) mtps
 	| MlslAst.EFragment e ->
 		fast_check_code gamma e
 	| MlslAst.EVertex e ->
@@ -229,6 +251,10 @@ and fast_check_match_pattern gamma mp =
 	in
 	Misc.Opt.iter mp.MlslAst.mp_condition (fast_check_code gamma');
 	fast_check_code gamma' mp.MlslAst.mp_action
+
+and fast_check_matchto_pattern gamma mtp =
+	fast_check_type_pattern mtp.MlslAst.mtp_pos mtp.MlslAst.mtp_pattern;
+	fast_check_code gamma mtp.MlslAst.mtp_action
 
 (* ========================================================================= *)
 

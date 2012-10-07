@@ -1,0 +1,13 @@
+
+const projMatrix  : mat44
+
+attr pos : vec2
+
+let vertex vs =
+	{ position = projMatrix * vec4 pos 0 1
+	}
+
+let fragment fs =
+	vec2 1 0.5 # vec2 (0.3, 1)
+
+let shader my_shader = (vs, fs)

@@ -30,6 +30,7 @@ let _ =
 	Hashtbl.add kw_map "mat43"       MlslParser.KW_MAT43;
 	Hashtbl.add kw_map "mat44"       MlslParser.KW_MAT44;
 	Hashtbl.add kw_map "match"       MlslParser.KW_MATCH;
+	Hashtbl.add kw_map "of"          MlslParser.KW_OF;
 	Hashtbl.add kw_map "rec"         MlslParser.KW_REC;
 	Hashtbl.add kw_map "sampler"     MlslParser.KW_SAMPLER;
 	Hashtbl.add kw_map "sampler2D"   MlslParser.KW_SAMPLER2D;
@@ -37,6 +38,7 @@ let _ =
 	Hashtbl.add kw_map "shader"      MlslParser.KW_SHADER;
 	Hashtbl.add kw_map "then"        MlslParser.KW_THEN;
 	Hashtbl.add kw_map "true"        MlslParser.KW_TRUE;
+	Hashtbl.add kw_map "type"        MlslParser.KW_TYPE;
 	Hashtbl.add kw_map "unit"        MlslParser.KW_UNIT;
 	Hashtbl.add kw_map "vec2"        MlslParser.KW_VEC2;
 	Hashtbl.add kw_map "vec3"        MlslParser.KW_VEC3;

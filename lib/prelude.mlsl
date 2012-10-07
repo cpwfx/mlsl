@@ -1,5 +1,64 @@
 (* MLSL Prelude file. *)
 
-let vec2 (x : float) (y : float) = x # y
-let vec3 (x : float) (y : float) (z : float) = x # y # z
-let vec4 (x : float) (y : float) (z : float) (w : float) = x # y # z # w
+let vec2 a1 =
+	match type of a1 with
+	| float -> fun (y : float) -> a1 # y
+	| vec2 -> a1
+	| (float * float) -> let (x, y) = a1 in x # y
+	end
+
+let vec3 a1 =
+	match type of a1 with
+	| float -> fun a2 ->
+		match type of a2 with
+		| float -> fun (z : float) -> a1 # a2 # z
+		| vec2  -> a1 # a2
+		| (float * float) -> a1 # vec2 a2
+		end
+	| vec2 -> fun (z : float) -> a1 # z
+	| (float * float) -> 
+		let (x, y) = a1 in fun (z : float) -> x # y # z
+	| vec3 -> a1
+	| (float * float * float) -> let (x, y, z) = a1 in x # y # z
+	| (float * vec2) -> let (x, yz) = a1 in x # yz
+	| (vec2 * float) -> let (xy, z) = a1 in xy # z
+	end
+
+let rec vec4 a1 =
+	match type of a1 with
+	| float -> fun a2 ->
+		match type of a2 with
+		| float -> fun a3 ->
+			match type of a3 with
+			| float -> fun (w : float) -> a1 # a2 # a3 # w
+			| vec2  -> a1 # a2 # a3
+			| (float * float) -> a1 # a2 # vec2 a3
+			end
+		| vec2 -> fun (w : float) -> a1 # a2 # w
+		| (float * float) -> fun (w : float) -> a1 # vec2 a2 # w
+		| vec3 -> a1 # a2
+		| (float * float * float | float * vec2 | vec2 * float) -> 
+			a1 # vec3 a2
+		end
+	| vec2 -> vec4 a1.x a1.y
+	| (float * float) -> let xy = vec2 a1 in vec4 xy.x xy.y
+	| vec3 -> vec4 a1.x a1.y a1.z
+	| (float * float * float | float * vec2 | vec2 * float) ->
+		let xyz = vec3 a1 in
+		vec4 xyz.x xyz.y xyz.z
+	| vec4 -> a1
+	| (float * float * float * float) ->
+		let (x, y, z, w) = a1 in x # y # z # w
+	| (float * float * vec2) ->
+		let (x, y, zw) = a1 in x # y # zw
+	| (float * vec2 * float) ->
+		let (x, yz, w) = a1 in x # yz # w
+	| (float * vec3) ->
+		let (x, yzw) = a1 in x # yzw
+	| (vec2 * float * float) ->
+		let (xy, z, w) = a1 in xy # z # w
+	| (vec2 * vec2) ->
+		let (xy, zw) = a1 in xy # zw
+	| (vec3 * float) ->
+		let (xyz, w) = a1 in xyz # w
+	end

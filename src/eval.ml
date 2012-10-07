@@ -147,6 +147,52 @@ let print_gamma gamma =
 	) gamma;
 	print_endline "==============================="
 
+let rec match_value_with_type_pattern pos tp mval =
+	match tp, value_kind pos mval with
+	| MlslAst.TPAny, _ -> true
+	| MlslAst.TPBool, TopDef.VBool _ -> true
+	| MlslAst.TPBool, (TopDef.VAttr(_, tt) | TopDef.VConst(_, tt)) ->
+		tt.MlslAst.tt_typ = MlslAst.TBool
+	| MlslAst.TPBool, _ -> false
+	| MlslAst.TPFloat, TopDef.VFloat _ -> true
+	| MlslAst.TPFloat, TopDef.VInt _ -> true
+	| MlslAst.TPFloat, (TopDef.VAttr(_, tt) | TopDef.VConst(_, tt)) ->
+		tt.MlslAst.tt_typ = MlslAst.TInt || tt.MlslAst.tt_typ = MlslAst.TFloat
+	| MlslAst.TPFloat, _ -> false
+	| MlslAst.TPInt, TopDef.VInt _ -> true
+	| MlslAst.TPInt, (TopDef.VAttr(_, tt) | TopDef.VConst(_, tt)) ->
+		tt.MlslAst.tt_typ = MlslAst.TInt
+	| MlslAst.TPInt, _ -> false
+	| MlslAst.TPMat(d1, d2), TopDef.VMat(d1', d2', _) ->
+		d1 = d1' && d2 = d2'
+	| MlslAst.TPMat(d1, d2), (TopDef.VAttr(_, tt) | TopDef.VConst(_, tt)) ->
+		tt.MlslAst.tt_typ = MlslAst.TMat(d1, d2)
+	| MlslAst.TPMat _, _ -> false
+	| MlslAst.TPSampler2D, TopDef.VSampler(_, tt) ->
+		tt.MlslAst.tt_typ = MlslAst.TSampler2D
+	| MlslAst.TPSampler2D, _ -> false
+	| MlslAst.TPSamplerCube, TopDef.VSampler(_, tt) ->
+		tt.MlslAst.tt_typ = MlslAst.TSamplerCube
+	| MlslAst.TPSamplerCube, _ -> false
+	| MlslAst.TPUnit, _ ->
+		Errors.error_p pos 
+			"Unimplemented: match_value_with_type_pattern TPUnit";
+		raise Eval_exception
+	| MlslAst.TPVec d, TopDef.VVec(d', _) -> d = d'
+	| MlslAst.TPVec d, (TopDef.VAttr(_, tt) | TopDef.VConst(_, tt)) ->
+		tt.MlslAst.tt_typ = MlslAst.TVec d
+	| MlslAst.TPVec _, _ -> false
+	| MlslAst.TPArrow _, TopDef.VSampler _ -> true
+	| MlslAst.TPArrow _, TopDef.VFunc _ -> true
+	| MlslAst.TPArrow _, _ -> false
+	| MlslAst.TPPair(tp1, tp2), TopDef.VPair(v1, v2) ->
+		match_value_with_type_pattern pos tp1 v1 &&
+		match_value_with_type_pattern pos tp2 v2
+	| MlslAst.TPPair _, _ -> false
+	| MlslAst.TPOr(tp1, tp2), _ ->
+		match_value_with_type_pattern pos tp1 mval ||
+		match_value_with_type_pattern pos tp2 mval
+
 let rec bind_pattern gamma pat value =
 	match pat.MlslAst.p_kind with
 	| MlslAst.PAny -> gamma
@@ -427,6 +473,9 @@ let rec eval gamma expr =
 	| MlslAst.EMatch(e, patterns) ->
 		let mval = eval gamma e in
 		bind_match_patterns gamma e.MlslAst.e_pos patterns mval
+	| MlslAst.EMatchType(e, mtps) ->
+		let mval = eval gamma e in
+		eval_matchto expr.MlslAst.e_pos gamma mval mtps
 	| MlslAst.EFragment e ->
 		TopDef.make_value expr.MlslAst.e_pos (TopDef.VFragment(gamma, e))
 	| MlslAst.EVertex e ->
@@ -468,6 +517,17 @@ and bind_match_pattern_list gamma pats value cnd_opt =
 				raise Eval_exception
 			end
 		end
+
+and eval_matchto pos gamma mval mtps =
+	match mtps with
+	| [] -> Errors.error_p pos "Type of value defined at %s is unmatched."
+			(Errors.string_of_pos mval.TopDef.v_pos);
+		raise Eval_exception
+	| mtp::mtps ->
+		if match_value_with_type_pattern mtp.MlslAst.mtp_pos mtp.MlslAst.mtp_pattern mval then
+			eval gamma mtp.MlslAst.mtp_action
+		else
+			eval_matchto pos gamma mval mtps
 
 let rec bind_top_pattern pat value =
 	match pat.MlslAst.p_kind with

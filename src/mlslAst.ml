@@ -91,6 +91,20 @@ module Swizzle = struct
 				(max (component_id c3) (component_id c4))
 end
 
+type typ_pattern =
+| TPAny
+| TPBool
+| TPFloat
+| TPInt
+| TPMat         of dim * dim
+| TPSampler2D
+| TPSamplerCube
+| TPUnit
+| TPVec         of dim
+| TPArrow       of typ_pattern * typ_pattern
+| TPPair        of typ_pattern * typ_pattern
+| TPOr          of typ_pattern * typ_pattern
+
 type typ =
 | TBool
 | TFloat
@@ -154,28 +168,29 @@ type expr =
 	; e_kind : expr_kind
 	}
 and expr_kind =
-| EVar      of string
-| EVarying  of string
-| EInt      of int
+| EVar       of string
+| EVarying   of string
+| EInt       of int
 | ETrue
 | EFalse
-| EFloat    of float
-| ESwizzle  of expr * Swizzle.t
-| ERecord   of record_field_value list
-| ESelect   of expr * string
-| EPair     of expr * expr
-| EBinOp    of binop * expr * expr
-| EUnOp     of unop * expr
-| EAbs      of pattern * expr
-| EApp      of expr * expr
-| ELet      of pattern * expr * expr
-| EFix      of pattern * expr
-| EIf       of expr * expr * expr
-| EMatch    of expr * match_pattern list
-| EFragment of expr
-| EVertex   of expr
-| EConstrU  of string
-| EConstrP  of string * expr
+| EFloat     of float
+| ESwizzle   of expr * Swizzle.t
+| ERecord    of record_field_value list
+| ESelect    of expr * string
+| EPair      of expr * expr
+| EBinOp     of binop * expr * expr
+| EUnOp      of unop * expr
+| EAbs       of pattern * expr
+| EApp       of expr * expr
+| ELet       of pattern * expr * expr
+| EFix       of pattern * expr
+| EIf        of expr * expr * expr
+| EMatch     of expr * match_pattern list
+| EMatchType of expr * matchto_pattern list
+| EFragment  of expr
+| EVertex    of expr
+| EConstrU   of string
+| EConstrP   of string * expr
 and record_field_value =
 	{ rfv_pos   : Errors.position
 	; rfv_name  : string
@@ -185,6 +200,11 @@ and match_pattern =
 	{ mp_patterns  : pattern list
 	; mp_condition : expr option
 	; mp_action    : expr
+	}
+and matchto_pattern =
+	{ mtp_pos     : Errors.position
+	; mtp_pattern : typ_pattern
+	; mtp_action  : expr
 	}
 
 type topdef_kind =

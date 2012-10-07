@@ -9,9 +9,11 @@
 %token KW_AND KW_ATTR KW_BEGIN KW_BOOL KW_CONST KW_ELSE KW_END KW_FALSE KW_FIX
 %token KW_FLOAT KW_FRAGMENT KW_FUN KW_IF KW_IN KW_INT KW_LET KW_MAT22 KW_MAT23
 %token KW_MAT24 KW_MAT32 KW_MAT33 KW_MAT34 KW_MAT42 KW_MAT43 KW_MAT44 KW_MATCH
-%token KW_REC KW_SAMPLER KW_SAMPLER2D KW_SAMPLERCUBE KW_SHADER KW_THEN KW_TRUE
-%token KW_UNIT KW_VEC2 KW_VEC3 KW_VEC4 KW_VERTEX KW_WHEN KW_WITH
+%token KW_OF KW_REC KW_SAMPLER KW_SAMPLER2D KW_SAMPLERCUBE KW_SHADER KW_THEN 
+%token KW_TRUE KW_TYPE KW_UNIT KW_VEC2 KW_VEC3 KW_VEC4 KW_VERTEX KW_WHEN 
+%token KW_WITH
 
+%left  PIPE
 %right ARROW
 %left  STMT
 %left  COMMA
@@ -64,6 +66,36 @@ typ_atom:
 	| KW_VEC4        { MlslAst.TVec Misc.Dim.Dim4                 }
 ;
 
+typ_pattern:
+	  typ_pattern ARROW typ_pattern { MlslAst.TPArrow($1, $3) }
+	| typ_pattern MUL typ_pattern { MlslAst.TPPair($1, $3) }
+	| typ_pattern PIPE typ_pattern { MlslAst.TPOr($1, $3) }
+	| typ_pattern_atom { $1 }
+;
+
+typ_pattern_atom:
+	  BR_OPN typ_pattern BR_CLS { $2 }
+	| ANY            { MlslAst.TPAny                               }
+	| KW_BOOL        { MlslAst.TPBool                              }
+	| KW_FLOAT       { MlslAst.TPFloat                             }
+	| KW_INT         { MlslAst.TPInt                               }
+	| KW_MAT22       { MlslAst.TPMat(Misc.Dim.Dim2, Misc.Dim.Dim2) }
+	| KW_MAT23       { MlslAst.TPMat(Misc.Dim.Dim2, Misc.Dim.Dim3) }
+	| KW_MAT24       { MlslAst.TPMat(Misc.Dim.Dim2, Misc.Dim.Dim4) }
+	| KW_MAT32       { MlslAst.TPMat(Misc.Dim.Dim3, Misc.Dim.Dim2) }
+	| KW_MAT33       { MlslAst.TPMat(Misc.Dim.Dim3, Misc.Dim.Dim3) }
+	| KW_MAT34       { MlslAst.TPMat(Misc.Dim.Dim3, Misc.Dim.Dim4) }
+	| KW_MAT42       { MlslAst.TPMat(Misc.Dim.Dim4, Misc.Dim.Dim2) }
+	| KW_MAT43       { MlslAst.TPMat(Misc.Dim.Dim4, Misc.Dim.Dim3) }
+	| KW_MAT44       { MlslAst.TPMat(Misc.Dim.Dim4, Misc.Dim.Dim4) }
+	| KW_SAMPLER2D   { MlslAst.TPSampler2D                         }
+	| KW_SAMPLERCUBE { MlslAst.TPSamplerCube                       }
+	| KW_UNIT        { MlslAst.TPUnit                              }
+	| KW_VEC2        { MlslAst.TPVec Misc.Dim.Dim2                 }
+	| KW_VEC3        { MlslAst.TPVec Misc.Dim.Dim3                 }
+	| KW_VEC4        { MlslAst.TPVec Misc.Dim.Dim4                 }
+;
+
 typ_term:
 	typ {
 			{ MlslAst.tt_pos = Errors.UserPos(Parsing.rhs_start_pos 1)
@@ -91,7 +123,7 @@ expr_id:
 	| KW_UNIT        { "unit"        }
 	| KW_VEC2        { "vec2"        }
 	| KW_VEC3        { "vec3"        }
-	| KW_VEC4        { "vec4"        }
+	| KW_VEC4        { "vec4"        } 
 ;
 
 expr:
@@ -222,6 +254,9 @@ expr_call_atom:
 	| KW_MATCH expr KW_WITH pipe_opt match_patterns_rev KW_END {
 			MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EMatch($2, List.rev $5))
 		}
+	| KW_MATCH KW_TYPE KW_OF expr KW_WITH matchto_patterns_rev KW_END {
+			MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EMatchType($4, List.rev $6))
+		} 
 	| BR_OPN expr BR_CLS { $2 }
 	| KW_BEGIN expr KW_END { $2 }
 	| SBR_OPN SBR_CLS { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EConstrU "[]") }
@@ -232,18 +267,6 @@ expr_call_atom:
 	| expr_call_atom DOT expr_id {
 			MlslAst.make_select (Parsing.rhs_start_pos 2) $1 $3
 		}
-	| KW_BOOL { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "bool") }
-	| KW_FLOAT { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "float") }
-	| KW_INT { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "int") }
-	| KW_MAT22 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat22") }
-	| KW_MAT23 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat23") }
-	| KW_MAT24 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat24") }
-	| KW_MAT32 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat32") }
-	| KW_MAT33 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat33") }
-	| KW_MAT34 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat34") }
-	| KW_MAT42 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat42") }
-	| KW_MAT43 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat43") }
-	| KW_MAT44 { MlslAst.make_expr (Parsing.rhs_start_pos 1) (MlslAst.EVar "mat44") }
 ;
 
 let_pattern:
@@ -304,6 +327,21 @@ pipe_sep_patterns_rev:
 	| pipe_sep_patterns_rev PIPE untyped_pattern { $3 :: $1 }
 ;
 
+matchto_pattern:
+	typ_pattern_atom ARROW expr {
+		{ MlslAst.mtp_pos     = Errors.UserPos(Parsing.rhs_start_pos 1)
+		; MlslAst.mtp_pattern = $1
+		; MlslAst.mtp_action  = $3
+		}
+	}
+;
+
+matchto_patterns_rev:
+	  /* empty */ { [] }
+	| matchto_pattern { [ $1 ] }
+	| matchto_patterns_rev PIPE matchto_pattern { $3 :: $1 }
+;
+
 when_opt:
 	  /* empty */  { None }
 	| KW_WHEN expr { Some $2 }
@@ -333,7 +371,7 @@ untyped_pattern:
 pattern_atom:
 	  BR_OPN pattern BR_CLS { $2 }
 	| ANY { MlslAst.make_pattern (Parsing.rhs_start_pos 1) MlslAst.PAny }
-	| expr_id { MlslAst.make_pattern (Parsing.rhs_start_pos 1) (MlslAst.PVar $1) }
+	| expr_id { MlslAst.make_pattern (Parsing.rhs_start_pos 1) (MlslAst.PVar $1) } 
 	| UNIT { MlslAst.make_pattern (Parsing.rhs_start_pos 1) (MlslAst.PConstrU "()") }
 	| KW_TRUE { MlslAst.make_pattern (Parsing.rhs_start_pos 1) (MlslAst.PTrue) }
 	| KW_FALSE { MlslAst.make_pattern (Parsing.rhs_start_pos 1) (MlslAst.PFalse) }

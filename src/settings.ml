@@ -18,7 +18,6 @@ let rec find_source libdirs source =
 		raise Exit
 	| libpath :: libdirs ->
 		let path = concat_path libpath source in
-		print_endline path;
 		if Sys.file_exists path && not (Sys.is_directory path) then
 			path
 		else find_source libdirs source
