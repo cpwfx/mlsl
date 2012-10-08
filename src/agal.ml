@@ -693,10 +693,10 @@ let build_binop rv r1 r2 op =
 			[ create_instr (IMov(make_dest_comp_rng 0 (int_of_dim d) rv, make_source r1))
 			; create_instr (IMov(make_dest_comp (int_of_dim d) rv, make_source_float r2))
 			]
-	| Midlang.BOJoinVV ->
+	| Midlang.BOJoinVV d ->
 		Some
-			[ create_instr (IMov(make_dest_comp_rng 0 2 rv, make_source r1))
-			; create_instr (IMov(make_dest_comp_rng 2 2 rv, make_source_shift 2 Dim2 r2))
+			[ create_instr (IMov(make_dest_row 0 d rv, make_source r1))
+			; create_instr (IMov(make_dest_row 1 d rv, make_source r2))
 			]
 	| Midlang.BOJoinVM(rdim, dim) ->
 		Some (create_instr (IMov(make_dest dim rv, make_source r1)) ::

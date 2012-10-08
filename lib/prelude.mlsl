@@ -31,8 +31,8 @@ let rec vec4 a1 =
 		| float -> fun a3 ->
 			match type of a3 with
 			| float -> fun (w : float) -> a1 # a2 # a3 # w
-			| vec2  -> a1 # a2 # a3
-			| (float * float) -> a1 # a2 # vec2 a3
+			| vec2  -> a1 # (a2 # a3)
+			| (float * float) -> a1 # (a2 # vec2 a3)
 			end
 		| vec2 -> fun (w : float) -> a1 # a2 # w
 		| (float * float) -> fun (w : float) -> a1 # vec2 a2 # w
@@ -50,7 +50,7 @@ let rec vec4 a1 =
 	| (float * float * float * float) ->
 		let (x, y, z, w) = a1 in x # y # z # w
 	| (float * float * vec2) ->
-		let (x, y, zw) = a1 in x # y # zw
+		let (x, y, zw) = a1 in x # (y # zw)
 	| (float * vec2 * float) ->
 		let (x, yz, w) = a1 in x # yz # w
 	| (float * vec3) ->
@@ -58,7 +58,7 @@ let rec vec4 a1 =
 	| (vec2 * float * float) ->
 		let (xy, z, w) = a1 in xy # z # w
 	| (vec2 * vec2) ->
-		let (xy, zw) = a1 in xy # zw
+		let (xy, zw) = a1 in xy.x # (xy.y # zw)
 	| (vec3 * float) ->
 		let (xyz, w) = a1 in xyz # w
 	end

@@ -309,8 +309,8 @@ let eval_binop pos op v1 v2 =
 		| TopDef.VVec(d1, v1), TopDef.VFloat f2 when int_of_dim d1 + 1 <= 4 ->
 			TopDef.make_value pos (TopDef.VVec(dim_of_int (int_of_dim d1 + 1),
 				Array.append v1 [| f2 |]))
-		| TopDef.VVec(Dim2, v1), TopDef.VVec(Dim2, v2) ->
-			TopDef.make_value pos (TopDef.VVec(Dim4, Array.append v1 v2))
+		| TopDef.VVec(d, v1), TopDef.VVec(d', v2) when d = d' ->
+			TopDef.make_value pos (TopDef.VMat(Dim2, d, [| v1; v2 |]))
 		| TopDef.VVec(d2, v1), TopDef.VMat(d1, d2', m2) when d2 = d2' && 1 + int_of_dim d1 <= 4 ->
 			TopDef.make_value pos (TopDef.VMat(dim_of_int (int_of_dim d1 + 1), d2,
 				Array.append [| v1 |] m2))

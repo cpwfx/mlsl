@@ -8,6 +8,6 @@ let vertex vs =
 	}
 
 let fragment fs =
-	vec2 1 0.5 # vec2 (0.3, 1)
+	vec4 (vec2 1 0.5) (vec2 (0.3, 1))
 
 let shader my_shader = (vs, fs)

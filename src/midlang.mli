@@ -81,7 +81,7 @@ type binop =
 | BOJoinFF
 | BOJoinFV of Misc.Dim.dim
 | BOJoinVF of Misc.Dim.dim
-| BOJoinVV
+| BOJoinVV of Misc.Dim.dim
 | BOJoinVM of Misc.Dim.dim * Misc.Dim.dim
 | BOJoinMV of Misc.Dim.dim * Misc.Dim.dim
 | BOJoinMM of Misc.Dim.dim

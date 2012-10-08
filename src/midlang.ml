@@ -89,7 +89,7 @@ type binop =
 | BOJoinFF
 | BOJoinFV of dim
 | BOJoinVF of dim
-| BOJoinVV
+| BOJoinVV of dim
 | BOJoinVM of dim * dim
 | BOJoinMV of dim * dim
 | BOJoinMM of dim
@@ -616,7 +616,7 @@ let ins_binop_cross3          = ins_binop (TVec Dim3) BOCross3
 let ins_binop_join_ff         = ins_binop (TVec Dim2) BOJoinFF
 let ins_binop_join_fv d       = ins_binop (TVec (dim_succ d)) (BOJoinFV d)
 let ins_binop_join_vf d       = ins_binop (TVec (dim_succ d)) (BOJoinVF d)
-let ins_binop_join_vv         = ins_binop (TVec Dim4) BOJoinVV
+let ins_binop_join_vv d       = ins_binop (TMat(Dim2, d)) (BOJoinVV d)
 let ins_binop_join_vm d1 d2   = ins_binop (TMat(dim_succ d1, d2)) (BOJoinVM(d1, d2))
 let ins_binop_join_mv d1 d2   = ins_binop (TMat(dim_succ d1, d2)) (BOJoinMV(d1, d2))
 let ins_binop_join_mm d       = ins_binop (TMat(Dim4, d)) (BOJoinMM d)
@@ -1032,8 +1032,8 @@ let unfold_join pos code reg1 reg2 =
 	| TVec d, (TInt | TFloat) ->
 		make_reg_value pos (RVReg (ins_binop_join_vf d code
 			reg1 (ins_convert_2f code reg2)))
-	| TVec Dim2, TVec Dim2 ->
-		make_reg_value pos (RVReg (ins_binop_join_vv code reg1 reg2))
+	| TVec d, TVec d' when d = d' ->
+		make_reg_value pos (RVReg (ins_binop_join_vv d code reg1 reg2))
 	| TVec d2, TMat(d1, d2') when 1 + int_of_dim d1 <= 4 && d2 = d2' ->
 		make_reg_value pos (RVReg (ins_binop_join_vm d1 d2 code reg1 reg2))
 	| TMat(d1, d2), TVec d2' when 1 + int_of_dim d1 <= 4 && d2 = d2' ->
